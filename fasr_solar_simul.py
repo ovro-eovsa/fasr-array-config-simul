@@ -14,8 +14,13 @@ from casatools import vpmanager, quanta
 from scipy.stats import binned_statistic
 import sunpy.map
 from scipy.spatial.distance import pdist
+import re
+from astropy.time import Time
+from astropy.coordinates import EarthLocation, AltAz, get_sun
+import astropy.units as u
 import time
 from functools import wraps
+from matplotlib.patches import Ellipse
 
 def make_msname(project: str,
                 target: str,
@@ -136,7 +141,7 @@ def calc_noise(noise_tb, array_config_file, freq_ghz, duration, integration_time
 
     Parameters:
       noise_tb : str
-          Noise temperature in MK (e.g., '0.5MK').
+          Noise temperature in K (e.g., '5000K').
       array_config_file : str
           Path to the antenna configuration file.
       freq_ghz : float
@@ -155,7 +160,7 @@ def calc_noise(noise_tb, array_config_file, freq_ghz, duration, integration_time
     baseline_lengths = get_baseline_lengths(array_config_file)
     N_bl = len(baseline_lengths)
     bmsize = get_max_resolution(freq_ghz, np.nanmax(baseline_lengths))
-    sigma_na = mk2jy(float(noise_tb.rstrip('MK')), freq_ghz, bmsize)
+    sigma_na = mk2jy(float(noise_tb.rstrip('K'))/1e6, freq_ghz, bmsize)
     N_integrations = duration / integration_time
     noisejy = sigma_na * np.sqrt(1 * 2 * len(baseline_lengths) * N_integrations)
     print(f"noise: {noisejy:.2f} Jy for {N_bl} baselines at {freq_ghz} GHz")
@@ -1008,6 +1013,59 @@ def update_fits_header(fits_file, freq_GHz):
     hdul.close()
     print(f"Updated {fits_file}: CRVAL3 and RESTFRQ set to {freq_value} Hz")
 
+
+def equivalent_amp_pha_error(phaerr: float, unit: str = 'deg') -> tuple[float, float]:
+    """
+    Compute the equivalent amplitude error (%) and the phase error (%) 
+    (relative to a full cycle) for a given phase error.
+    ## Bryan Butler: A phase error of x radians has the same effects as an amplitude error of 100 x %
+
+    Parameters
+    ----------
+    phaerr : float
+        The phase error value.
+    unit : {'deg', 'rad'}
+        Unit of `phase_error`:
+        - 'deg': phase_error is in degrees
+        - 'rad': phase_error is in radians
+
+    Returns
+    -------
+    phase_pct : float
+        Fractional Phase error of a full cycle (360° or 2π).
+    amp_pct : float
+        Equivalent fractional amplitude error.
+
+    Raises
+    ------
+    ValueError
+        If `unit` is not 'deg' or 'rad'.
+
+    Examples
+    --------
+    >>> equivalent_amp_and_phase_error(5.7, unit='deg')
+    (1.5833333333333333, 9.95)
+    >>> # 0.1 rad phase error:
+    >>> equivalent_amp_and_phase_error(0.1, unit='rad')
+    (1.5915494309189535, 10.0)
+    """
+    if unit == 'deg':
+        # Phase error in degrees → percent of 360°
+        phase_pct = (phaerr / 360.0) * 100.0
+        # Convert to radians for amplitude error
+        phase_rad = np.deg2rad(phaerr)
+    elif unit == 'rad':
+        # Phase error in radians → percent of 2π
+        phase_pct = (phaerr / (2 * np.pi)) * 100.0
+        phase_rad = phaerr
+    else:
+        raise ValueError("unit must be 'deg' or 'rad'")
+
+    # Equivalent amplitude error (%) = phase error in radians × 100
+    amp_pct = phase_rad * 100.0
+
+    return float(phase_pct)/100, float(amp_pct)/100
+
 def generate_caltb(msfile, caltype=['ph','amp', 'mbd'], calerr=[0.05, 0.05, 0.01]):
     '''
     Generate CASA calibration tables (caltb) to corrupt the visibilities in a Measurement Set (MS) by assuming potential errors in the calibration.
@@ -1063,8 +1121,59 @@ def generate_caltb(msfile, caltype=['ph','amp', 'mbd'], calerr=[0.05, 0.05, 0.01
     return gaintable
 
 @runtime_report
+def get_local_noon_utc(cfg_path: str, date: datetime = None) -> Time:
+    """
+    Read longitude and latitude from a config file and compute local solar noon in UTC.
+
+    :param cfg_path: Path to the .cfg file containing a line like '#COFA=-114.42610, 39.47780'
+    :type cfg_path: str
+    :param date: Date for which to compute local noon. If None, uses the current date/time.
+    :type date: datetime.datetime, optional
+    :return: Time of local solar noon in UTC
+    :rtype: astropy.time.Time
+    :raises ValueError: If the COFA line cannot be found or parsed
+    :raises TypeError: If `date` is not a datetime object
+    """
+    # Parse the COFA line
+    pattern = re.compile(r"#COFA\s*=\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)")
+    lon = lat = None
+    with open(cfg_path, 'r') as f:
+        for line in f:
+            m = pattern.match(line.strip())
+            if m:
+                lon, lat = map(float, m.groups())
+                break
+    if lon is None or lat is None:
+        raise ValueError("Could not find or parse '#COFA=' line in config")
+
+    # Determine the central time
+    if date is None:
+        central_time = Time.now()
+    else:
+        if not isinstance(date, datetime):
+            raise TypeError("`date` must be a datetime.datetime instance")
+        central_time = Time(date)
+
+    # Set up observer location
+    location = EarthLocation(lat=lat * u.deg,
+                             lon=lon * u.deg,
+                             height=0 * u.m)
+
+    # Create a time grid spanning ±12 hours around the central time
+    times = central_time + np.linspace(-0.5, 0.5, 1001) * u.day
+    frame = AltAz(obstime=times, location=location)
+
+    # Compute Sun altitudes and find the maximum (local noon)
+    sun_altitudes = get_sun(times).transform_to(frame).alt
+    idx_noon = np.argmax(sun_altitudes)
+    return times[idx_noon]
+# Example usage:
+# noon_utc = get_local_noon_utc("observatory.cfg")
+# print("Local noon (UTC):", noon_utc.iso)
+
+@runtime_report
 def generate_ms(config_file, solar_model, reftime, freqghz=None,
-                integration_time=60, msname='fasr.ms', duration=None, noise='0.5MK'):
+                integration_time=60, msname='fasr.ms', duration=None, noise='5000K'):
     """
     Generate a Measurement Set (MS) using CASA's simulator tool with the solar model read from a FITS file.
 
@@ -1328,6 +1437,7 @@ def plot_two_casa_images_with_convolution(image1_filename, image2_filename,
     array_config = image_meta.get('array_config', '')
     noise = image_meta.get('noise', None)
     cal_error = image_meta.get('cal_error', None)
+    dur = image_meta.get('duration', None)
     if not compare_two:
         figsize = (figsize[0] / 3 * 2, figsize[1])
     ia = IA()
@@ -1433,10 +1543,12 @@ def plot_two_casa_images_with_convolution(image1_filename, image2_filename,
              va='bottom', color='white')
     ax1.text(0.02, 0.98, f'Array cfg: {array_config}', transform=ax1.transAxes, ha='left',
              va='top', color='white',)
-    ax1.text(0.02,0.92, f'Themal noise: {noise}', transform=ax1.transAxes, ha='left',
+    ax1.text(0.02,0.92, f'Dur: {dur}', transform=ax1.transAxes, ha='left',
              va='top', color='white',)
-    ax1.text(0.02,0.86, f'Cal err: {cal_error}', transform=ax1.transAxes, ha='left',
-                va='top', color='white',)
+    ax1.text(0.02,0.86, f'Themal noise: {noise}', transform=ax1.transAxes, ha='left',
+             va='top', color='white',)
+    ax1.text(0.02,0.80, f'Cal err: {cal_error}', transform=ax1.transAxes, ha='left',
+             va='top', color='white',)
     plt.colorbar(im1, ax=ax1, label=r'T$_B$ [K]')
 
     # Right panel: Convolved Image2 as background.
@@ -1689,16 +1801,17 @@ def plot_two_casa_images(image1_filename, image2_filename,
     array_config2 = array_configs[1]
     noise = image_meta.get('noise', None)
     cal_error = image_meta.get('cal_error', None)
+    dur = image_meta.get('duration', None)
 
     ia = IA()
     # --- Open the first image and extract data, coordinate system, and restoring beam ---
     ia.open(image1_filename)
     pix1 = ia.getchunk()[:, :, 0, 0]  # assume image shape [nx, ny, 1, 1]
     csys1 = ia.coordsys()
-    # beam = ia.restoringbeam()  # e.g., returns {'major': {'value': 6.0, 'unit': 'arcsec'},
-    #                   'minor': {'value': 6.0, 'unit': 'arcsec'},
-    #                   'positionangle': {'value': 0.0, 'unit': 'deg'}}
+    beam1 = ia.restoringbeam()
     ia.close()
+
+
 
     # Build an Astropy WCS object using the CASA coordinate system from image1.
     rad_to_deg = 180.0 / np.pi
@@ -1707,6 +1820,11 @@ def plot_two_casa_images(image1_filename, image2_filename,
     w.wcs.cdelt = np.array(csys1.increment()['numeric'][0:2]) * rad_to_deg
     w.wcs.crval = np.array(csys1.referencevalue()['numeric'][0:2]) * rad_to_deg
     w.wcs.ctype = ['RA---SIN', 'DEC--SIN']
+
+    # --- add restoring‐beam ellipse in pixel units ---
+    # convert beam major/minor (arcsec) → pixels using WCS cdelt (deg→arcsec)
+    pixscale_x = abs(w.wcs.cdelt[0]) * 3600.0
+    pixscale_y = abs(w.wcs.cdelt[1]) * 3600.0
 
     # # Generate an output filename for the convolved image.
     # output_filename = image2_filename.replace('.im', '.im.convolved')
@@ -1727,6 +1845,7 @@ def plot_two_casa_images(image1_filename, image2_filename,
     # --- Read the convolved image to extract its pixel data ---
     ia.open(image2_filename)
     pix2 = ia.getchunk()[:, :, 0, 0]
+    beam2 = ia.restoringbeam()
     ia.close()
 
     if image1_model_filename is not None:
@@ -1740,6 +1859,9 @@ def plot_two_casa_images(image1_filename, image2_filename,
 
     # --- Crop both images using the same crop_fraction ---
     shape = pix1.shape[0]  # assume square images.
+
+
+
 
     crop_fraction_rms = (0.9, 1.0)
     p1_rms = int(shape * crop_fraction_rms[0])
@@ -1834,11 +1956,28 @@ def plot_two_casa_images(image1_filename, image2_filename,
              va='bottom', color='white')
     ax1.text(0.02, 0.98, f'Array cfg: {array_config1}', transform=ax1.transAxes, ha='left',
              va='top', color='white', fontweight='bold')
-    ax1.text(0.02,0.92, f'Themal noise: {noise}', transform=ax1.transAxes, ha='left',
+    ax1.text(0.02,0.92, f'Dur: {dur}', transform=ax1.transAxes, ha='left',
              va='top', color='white',)
-    ax1.text(0.02,0.86, f'Cal err: {cal_error}', transform=ax1.transAxes, ha='left',
+    ax1.text(0.02,0.86, f'Themal noise: {noise}', transform=ax1.transAxes, ha='left',
+             va='top', color='white',)
+    ax1.text(0.02,0.80, f'Cal err: {cal_error}', transform=ax1.transAxes, ha='left',
              va='top', color='white',)
     plt.colorbar(im1, ax=ax1, label=r'T$_B$ [K]')
+
+    # place ellipse at 10% in from lower-left corner of the panel
+    shape_cropped = cropped1.shape
+    x0 = shape_cropped[1] * 0.10
+    y0 = shape_cropped[0] * 0.10
+
+    major1_pix = beam1['major']['value'] / pixscale_x
+    minor1_pix = beam1['minor']['value'] / pixscale_y
+    pa1_deg   = beam1['positionangle']['value']
+
+    ell = Ellipse((x0, y0),
+                  width=major1_pix, height=minor1_pix,
+                  angle=pa1_deg,
+                  edgecolor='white', facecolor='none', lw=1.5)
+    ax1.add_patch(ell)
 
     # Right panel: Convolved Image2 as background.
     ax2 = axs[0, 1]
@@ -1857,13 +1996,27 @@ def plot_two_casa_images(image1_filename, image2_filename,
              va='bottom', color='white')
     ax2.text(0.02, 0.98, f'Array cfg: {array_config2}', transform=ax2.transAxes, ha='left',
              va='top', color='white', fontweight='bold')
-    ax2.text(0.02,0.92, f'Themal noise: {noise}', transform=ax2.transAxes, ha='left',
+    ax2.text(0.02,0.92, f'Dur: {dur}', transform=ax2.transAxes, ha='left',
              va='top', color='white',)
-    ax2.text(0.02,0.86, f'Cal err: {cal_error}', transform=ax2.transAxes, ha='left',
+    ax2.text(0.02,0.86, f'Themal noise: {noise}', transform=ax2.transAxes, ha='left',
              va='top', color='white',)
+    ax2.text(0.02,0.80, f'Cal err: {cal_error}', transform=ax2.transAxes, ha='left',
+             va='top', color='white',)
+
     plt.colorbar(im2, ax=ax2, label=r'T$_B$ [K]')
 
-    # Left panel: Image1 (original)
+    major2_pix = beam2['major']['value'] / pixscale_x
+    minor2_pix = beam2['minor']['value'] / pixscale_y
+    pa2_deg   = beam2['positionangle']['value']
+
+    ell = Ellipse((x0, y0),
+                  width=major2_pix, height=minor2_pix,
+                  angle=pa2_deg,
+                  edgecolor='white', facecolor='none', lw=1.5)
+    ax2.add_patch(ell)
+
+
+# Left panel: Image1 (original)
     ax3 = axs[1, 0]
     im3 = ax3.imshow(img_fidelity1.transpose(), origin='lower', cmap=plt.get_cmap(cmap_model),
                      vmax=vmax_val1_model, vmin=vmin_val1_model)
@@ -1882,4 +2035,6 @@ def plot_two_casa_images(image1_filename, image2_filename,
     plt.colorbar(im4, ax=ax4, label=r'I/|I-T|')
 
     plt.tight_layout()
-    return fig, axs
+    stats = {'snr': [snr1, snr2] }
+
+    return fig, axs, stats
