@@ -45,7 +45,7 @@ def make_imname(msname: str,
                 ) -> str:
     parts = [msname]
     if phaerr is not None:
-        parts.append(f'phaerr{np.int_(phaerr * 100)}pct')
+        parts.append(f'phaerr{np.int_(phaerr * 360)}deg')
     if amperr is not None:
         parts.append(f'amperr{np.int_(amperr * 100)}pct')
     parts.append(deconvolver)
