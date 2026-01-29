@@ -1,0 +1,14 @@
+# Default ignored files
+/shelf/
+/workspace.xml
+# Editor-based HTTP Client requests
+/httpRequests/
+# Datasource local storage ignored files
+/dataSources/
+/dataSources.local.xml
+.idea/
+*.log
+FASR/
+*2.py
+*2.ipynb
+fig-fasr_Log_Spiral-168-n_arms=3-antennas_per_arm=56-alpha=1.00-gamma=0.55-r0=1.5-r_max=1800-n_turn=2.0.jpg
