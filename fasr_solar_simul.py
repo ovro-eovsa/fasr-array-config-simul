@@ -1837,7 +1837,7 @@ def make_diskmodel_from_mhd(modeldir = '../fasr_sim/skymodels/quiet_sun/', npzfi
             imdata_ = rotate(imdata_, p0, reshape=False, mode='constant', cval=0.0)
         imdata = np.reshape(imdata_, (nx, ny, 1, 1)) * 1e4  # convert to Jy/pixel
 
-        res = ia.fromarray(pixels=imdata, csys=cs0_rec)
+        ia.fromarray(pixels=imdata, csys=cs0_rec)
         print(cs0_rec['spectral2']['wcs'])
         ia.setbrightnessunit("Jy/pixel")
         ia.setrestoringbeam(major='20arcsec', minor='20arcsec', pa='0deg')
