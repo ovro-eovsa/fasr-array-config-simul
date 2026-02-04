@@ -304,7 +304,6 @@ def calc_noise(tsys, array_config_file, dish_diameter=None, total_flux=None, dur
 
     # Natural Weighting Simulation
     # Sum of weights = Total Visibilities
-    sum_w_nat = np.sum(valid_cells)  # Should equal n_vis
     sum_w2_nat = np.sum(valid_cells)  # Since w=1, sum(w^2) = sum(w)
 
     # Uniform Weighting Simulation
