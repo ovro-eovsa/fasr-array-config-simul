@@ -233,9 +233,9 @@ def calc_noise(tsys, array_config_file, dish_diameter=None, total_flux=None, dur
       freqghz: float or str
             Observing frequency in GHz (e.g., '1GHz' or 1.0).
       uv_cell: float
-            UV cell size in number of wavelengths. Better to use the CLEAN parameters to calculate it as
-            uv_cell = 1 / (imsize * cellsize in radians)
-            If None, defaults to twice the dish diameter. Better to
+            UV cell size in number of wavelengths. It is recommended to use the CLEAN parameters to calculate it as
+            uv_cell = 1 / (imsize * cellsize in radians).
+            If None, defaults to twice the dish diameter expressed in wavelengths at the observing frequency.
 
     Reference: https://casaguides.nrao.edu/index.php/Simulating_ngVLA_Data-CASA5.4.1#Estimating_the_Scaling_Parameter_for_Adding_Thermal_Noise
 
