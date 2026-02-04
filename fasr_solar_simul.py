@@ -2523,7 +2523,8 @@ def plot_two_casa_images_with_convolution(image1_filename, image2_filename,
     if not (sigma_jy is None):
         sigma_tb = float(sigma_jy.rstrip('Jy/beam')) * jybm2k
     else:
-        sigma_tb = None
+        # Ensure sigma_tb is always numeric to avoid TypeError when formatting.
+        sigma_tb = 0.0
     if bunit.lower() == 'jy/beam':
         pix1 *= jybm2k
     elif bunit.lower() == 'jy/pixel':
