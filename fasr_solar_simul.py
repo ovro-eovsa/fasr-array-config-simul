@@ -13,7 +13,6 @@ from scipy.constants import c
 import os
 from casatools import vpmanager, quanta
 from scipy.stats import binned_statistic
-from scipy.stats.mstats_extras import median_cihs
 import sunpy.map
 from scipy.spatial.distance import pdist
 import re
