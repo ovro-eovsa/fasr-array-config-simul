@@ -212,7 +212,7 @@ def get_max_resolution(freq, max_baseline):
     return res  # in arcsec
 
 def calc_noise(tsys, array_config_file, dish_diameter=None, total_flux=None, duration=10., integration_time=1.,
-               channel_width_mhz=10., eta_q=0.93, eta_a=0.6, freqghz='1GHz', uv_cell=None, verbose=False):
+               channel_width_mhz=10., nchannel=1, eta_q=0.93, eta_a=0.6, freqghz='1GHz', uv_cell=None, verbose=False):
     """
     Calculate the noise level for a given array configuration.
 
@@ -226,6 +226,10 @@ def calc_noise(tsys, array_config_file, dish_diameter=None, total_flux=None, dur
           Total observation duration in seconds.
       integration_time : float
           Single integration time in seconds.
+      channel_width_mhz : float
+            Channel width in MHz.
+      nchannel: int
+            Number of channels (default is 1).
       eta_q: float
             Digitizer quantization efficiency (default is 0.93 for 8-bit sampling).
       eta_a: float
@@ -289,7 +293,7 @@ def calc_noise(tsys, array_config_file, dish_diameter=None, total_flux=None, dur
     # We define the range to cover the max baseline
     uv_max = np.max(np.abs(u))
     bins = int((2 * uv_max) / uv_cell)
-    print(f"UV Grid: {bins} x {bins} cells covering +/- {uv_max:.1f} wavelengths")
+    #print(f"UV Grid: {bins} x {bins} cells covering +/- {uv_max:.1f} wavelengths")
 
     # Calculate density map
     counts, _, _ = np.histogram2d(u, v, bins=bins, range=[[-uv_max, uv_max], [-uv_max, uv_max]])
@@ -355,14 +359,15 @@ def calc_noise(tsys, array_config_file, dish_diameter=None, total_flux=None, dur
     sefd = 2 * 1.38e-16 * t_total / 1e-23 / eta_a / eta_q / (np.pi * (dish_diameter / 2 * 1e2) ** 2) 
     print(f'Estimated SEFD: {sefd:.3e} Jy') # in Jy
 
-    # Calculate naturally weighted point source sensitivity
-    sigma_na = sefd / np.sqrt(2 * n_vis * integration_time * (channel_width_mhz * 1e6))  # in Jy/beam
-    print(f"Estimated natural weighting point source sensitivity per integration per channel sigma_na: {sigma_na:.3e} Jy/beam")
+    # Calculate Stokes I naturally weighted point source sensitivity for the entire duration and bandwidth
+    sigma_na = sefd / np.sqrt(2 * n_vis * duration * (nchannel * channel_width_mhz * 1e6))  # in Jy/beam
+    print(f"Estimated natural weighting point source sensitivity sigma_na: {sigma_na:.3e} Jy/beam")
     sigma_un = amplification_factor * sigma_na
-    print(f"Estimated uniform weighting point source sensitivity per integration per channel sigma_un: {sigma_un:.3e} Jy/beam")
+    print(f"Estimated uniform weighting point source sensitivity sigma_un: {sigma_un:.3e} Jy/beam")
 
-    N_integrations = duration / integration_time
-    noisejy = sigma_na * np.sqrt(1 * 2 * len(baseline_lengths) * N_integrations)
+    # Calculate noise per baseline per channel per polarization per integration, which will be used to corrupt the visibilities
+    n_int = duration / integration_time
+    noisejy = sigma_na * np.sqrt(nchannel * 2 * len(baseline_lengths) * n_int)
     print(f"Estimated noise per baseline per channel per polarization per integration: {noisejy:.3e} Jy for {n_bl} baselines")
     return noisejy, sigma_na, sigma_un
 
@@ -2167,7 +2172,7 @@ def calc_total_flux_on_dish(solar_model, dish_diameter=1.5, freqghz=None):
     dy_model = header.get('CDELT2') * 3600.  # in arcsec per pixel
     nx = header.get('NAXIS1')
     ny = header.get('NAXIS2')
-    primary_beam = 1.22 * (3e10 / (float(freq_GHz.rstrip('GHz')) * 1e9)) / (dish_diameter * 100) * (206265.)  # in arcsec
+    primary_beam = 1.22 * (3e10 / (freq_ghz * 1e9)) / (dish_diameter * 100) * (206265.)  # in arcsec
     # Mask out pixels outside the primary beam
     cx = int(nx / 2)
     cy = int(ny / 2)
@@ -2667,7 +2672,7 @@ def plot_two_casa_images_with_convolution(image1_filename, image2_filename,
                      vmax=vmax_val, vmin=vmin_val, extent=extent)
 
     # Beam ellipse.
-    ell = Ellipse((-1000, -1000),
+    ell = Ellipse((ax1.get_xlim()[0]*0.95, ax1.get_ylim()[0]*0.95),
                   width=major_pix*pixscale_x, height=minor_pix*pixscale_x,
                   angle=(-(90-pa_deg)),
                   edgecolor='white', facecolor='none', lw=1.5)
@@ -2718,7 +2723,14 @@ def plot_two_casa_images_with_convolution(image1_filename, image2_filename,
                      vmax=vmax_val2, vmin=vmin_val2, extent=extent2)
     major_pix2 = beam['major']['value'] / pixscale_x2
     minor_pix2 = beam['minor']['value'] / pixscale_y2
-    ell = Ellipse((-1000, -1000),
+
+    ax2.set_xlabel('Solar X (arcsec)')
+    ax2.set_ylabel('Solar Y (arcsec)')
+    ax2.set_xlim(ax1.get_xlim())
+    ax2.set_ylim(ax1.get_ylim())
+    ax2.set_title(title2)
+
+    ell = Ellipse((ax2.get_xlim()[0]*0.95, ax2.get_ylim()[0]*0.95),
                   width=major_pix2*pixscale_x2, height=minor_pix2*pixscale_x2,
                   angle=(-(90-pa_deg)),
                   edgecolor='white', facecolor='none', lw=1.5)
@@ -2729,10 +2741,6 @@ def plot_two_casa_images_with_convolution(image1_filename, image2_filename,
                          edgecolor='white', facecolor='none',
                          linestyle=':', linewidth=1.0)
     ax2.add_patch(rms_circle2)
-
-    ax2.set_xlabel('Solar X (arcsec)')
-    ax2.set_ylabel('Solar Y (arcsec)')
-    ax2.set_title(title2)
     ax2.text(0.98, 0.01, r'T$_{B}^{min}$'+f': {datamin2:.1e} K', transform=ax2.transAxes, ha='right',
              va='bottom', color='white', fontsize=legend_size)
     ax2.text(0.98, 0.04, r'T$_{B}^{rms}$'+f': {rms2:.1e} K', transform=ax2.transAxes, ha='right',
