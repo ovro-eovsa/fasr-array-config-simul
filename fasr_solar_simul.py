@@ -1,5 +1,4 @@
 from __future__ import annotations
-from astropy.units.equivalencies import pixel_scale
 from astropy.wcs import WCS
 from casatools import image as IA
 from datetime import datetime
