@@ -344,7 +344,7 @@ def calc_noise(tsys, array_config_file, dish_diameter=None, total_flux=None, dur
     # Estimate antenna temperature
     if total_flux is None:
         print('Use tant_quiet_sun_calc to estimate antenna temperature on the quiet Sun')
-        tant = tant_quiet_sun_calc(dish_diameter=dish_diameter, eta_a=eta_a)
+        tant = tant_quiet_sun_calc(fghz=freqghz, dish_diameter=dish_diameter, eta_a=eta_a)
     else:
         print(total_flux)
         print(f'Calculate antenna temperature from total flux {total_flux} sfu incident on the dish')
