@@ -24,6 +24,7 @@ from functools import wraps
 from matplotlib.patches import Ellipse, Circle
 from scipy.spatial import distance
 
+
 def make_msname(project: str,
                 target: str,
                 freq: str,
@@ -47,12 +48,13 @@ def make_imname(msname: str,
                 ) -> str:
     parts = [msname]
     if phaerr is not None:
-        phaerr_deg = phaerr * 360.0
-        parts.append(f'phaerr{phaerr_deg:.0f}deg')
+        phaerr_deg = np.degrees(phaerr)
+        parts.append(f'phaerr{phaerr_deg:.1f}deg')
     if amperr is not None:
         parts.append(f'amperr{np.int_(amperr * 100)}pct')
     parts.append(deconvolver)
     return '_'.join(parts)
+
 
 def format_duration(seconds):
     """Format seconds into appropriate unit string."""
@@ -70,6 +72,7 @@ def format_duration(seconds):
 
 def runtime_report(func):
     """Decorator to report runtime of a function and log completion time."""
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         start = time.time()
@@ -82,7 +85,9 @@ def runtime_report(func):
             f"runtime: {format_duration(duration)}"
         )
         return result
+
     return wrapper
+
 
 qa = quanta()
 vp = vpmanager()
@@ -122,6 +127,7 @@ def mk2jy(Tb, nu, res_arcsec):
     I = Tb * (nu * res_arcsec) ** 2 * 1e6 / 1.22e6
     return I
 
+
 def sfu2tb(freq, flux, size, square=True, reverse=False):
     '''
     freq: single element or array, in Hz
@@ -144,6 +150,7 @@ def sfu2tb(freq, flux, size, square=True, reverse=False):
         # returned value is brightness temperature in K
         return flux * factor
 
+
 def tb_quietsun(fghz=1.):
     """
     Inputs:
@@ -153,7 +160,8 @@ def tb_quietsun(fghz=1.):
     """
     ## brightness temperature spectrum, taken from Zirin 1991
     # Valid for ~1 GHz and up
-    return(140077. * fghz ** (-2.1) + 10880.)
+    return (140077. * fghz ** (-2.1) + 10880.)
+
 
 def tant_quiet_sun_calc(dish_diameter=1.5, fghz=1., eta_a=0.6):
     """
@@ -171,14 +179,15 @@ def tant_quiet_sun_calc(dish_diameter=1.5, fghz=1., eta_a=0.6):
     AU = 1.496e13
     clight = 2.998e10
     Tb_sun = tb_quietsun(fghz)
-    Omega_sun = np.pi * (R_sun/AU) ** 2.
+    Omega_sun = np.pi * (R_sun / AU) ** 2.
     Omega_ant = np.pi * ((clight / (fghz * 1e9)) / (dish_diameter * 1e2) / 2.) ** 2.
     # Beam ratio is defined as the ratio between the solid angle of the source to the primary beam
-    beam_ratio_ = Omega_sun/Omega_ant
+    beam_ratio_ = Omega_sun / Omega_ant
     # The beam ratio becomes unity when the sun fills the primary beam
     beam_ratio = np.minimum(beam_ratio_, np.ones_like(beam_ratio_))
     Tant = eta_a * beam_ratio * Tb_sun
     return Tant
+
 
 def total_flux_to_tant(total_flux, eta_a=0.6, dish_diameter=2.):
     '''
@@ -191,9 +200,10 @@ def total_flux_to_tant(total_flux, eta_a=0.6, dish_diameter=2.):
     Tant: antenna temperature in K
     '''
     k_b = 1.38065e-16  # Boltzmann constant in erg/K
-    A_e = eta_a * np.pi * ((dish_diameter * 1e2)/ 2.) ** 2.  # effective area in cm^2
+    A_e = eta_a * np.pi * ((dish_diameter * 1e2) / 2.) ** 2.  # effective area in cm^2
     Tant = total_flux * 1e-19 * A_e / (2 * k_b)
     return Tant
+
 
 def get_baseline_lengths(filename):
     '''
@@ -207,9 +217,10 @@ def get_max_resolution(freq, max_baseline):
     '''
     freq in GHz, max_baseline in m
     '''
-    wavelength = 299792458/(freq*1e9)
-    res = wavelength/max_baseline*180/3.14159*3600
+    wavelength = 299792458 / (freq * 1e9)
+    res = wavelength / max_baseline * 180 / 3.14159 * 3600
     return res  # in arcsec
+
 
 def calc_noise(tsys, array_config_file, dish_diameter=None, total_flux=None, duration=10., integration_time=1.,
                channel_width_mhz=10., nchannel=1, eta_q=0.93, eta_a=0.6, freqghz='1GHz', uv_cell=None, verbose=False):
@@ -261,7 +272,7 @@ def calc_noise(tsys, array_config_file, dish_diameter=None, total_flux=None, dur
     n_bl = len(baseline_lengths)
     n_vis = n_ant * (n_ant - 1)
 
-    c = 2.998e8 # speed of light in m/s
+    c = 2.998e8  # speed of light in m/s
     if isinstance(freqghz, str):
         freq_hz = float(re.findall(r"[-+]?\d*\.\d+|\d+", freqghz)[0]) * 1e9
     elif isinstance(freqghz, (float, int)):
@@ -270,7 +281,7 @@ def calc_noise(tsys, array_config_file, dish_diameter=None, total_flux=None, dur
         raise ValueError("freqghz must be a string or a float/int representing frequency in GHz")
     lam = c / freq_hz  # Wavelength in meters
     if uv_cell is None:
-        uv_cell = dish_diameter * 2.0 / lam # Default UV cell size in meters
+        uv_cell = dish_diameter * 2.0 / lam  # Default UV cell size in meters
 
     # 2. Generate UV Coverage (Snapshot at Zenith)
     # We only need the relative distribution, so Zenith snapshot is a good proxy
@@ -356,8 +367,8 @@ def calc_noise(tsys, array_config_file, dish_diameter=None, total_flux=None, dur
     print(f'Total noise temperature (K): {t_total:.3e} K')
 
     # Calculate System Equivalent Flux Density (SEFD) using the provided noise temperature.
-    sefd = 2 * 1.38e-16 * t_total / 1e-23 / eta_a / eta_q / (np.pi * (dish_diameter / 2 * 1e2) ** 2) 
-    print(f'Estimated SEFD: {sefd:.3e} Jy') # in Jy
+    sefd = 2 * 1.38e-16 * t_total / 1e-23 / eta_a / eta_q / (np.pi * (dish_diameter / 2 * 1e2) ** 2)
+    print(f'Estimated SEFD: {sefd:.3e} Jy')  # in Jy
 
     # Calculate Stokes I naturally weighted point source sensitivity for the entire duration and bandwidth
     sigma_na = sefd / np.sqrt(2 * n_vis * duration * (nchannel * channel_width_mhz * 1e6))  # in Jy/beam
@@ -368,7 +379,8 @@ def calc_noise(tsys, array_config_file, dish_diameter=None, total_flux=None, dur
     # Calculate noise per baseline per channel per polarization per integration, which will be used to corrupt the visibilities
     n_int = duration / integration_time
     noisejy = sigma_na * np.sqrt(nchannel * 2 * len(baseline_lengths) * n_int)
-    print(f"Estimated noise per baseline per channel per polarization per integration: {noisejy:.3e} Jy for {n_bl} baselines")
+    print(
+        f"Estimated noise per baseline per channel per polarization per integration: {noisejy:.3e} Jy for {n_bl} baselines")
     return noisejy, sigma_na, sigma_un
 
 
@@ -469,6 +481,7 @@ def generate_golden_spiral_antenna_positions(n_antennas=20, r0=5, r_max=100, n_t
     aspect = 1 / np.cos(np.deg2rad(latitude))
     positions[:, 1] *= aspect
     return positions
+
 
 @runtime_report
 def generate_log_spiral_antenna_positions(n_arms=3, antennas_per_arm=24, r0=35, r_max=2000,
@@ -834,6 +847,7 @@ def match_template(candidates, template):
 
     return np.array(final_selection)
 
+
 def generate_archimedean_spiral_antenna_positions(n_antennas=20, a=1, b=5, theta_max=4 * np.pi, latitude=39.54780):
     """
     Generate antenna positions along an Archimedean spiral.
@@ -1017,6 +1031,7 @@ def radial_profile(psf, bin_size=1):
     bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
     return bin_centers, radial_mean
 
+
 def fit_beam(psf, uv_max, dtheta, nsigma=2.):
     """
     Fit the main beam with a 2D Gaussian to extract FWHM major and minor axes.
@@ -1047,6 +1062,7 @@ def fit_beam(psf, uv_max, dtheta, nsigma=2.):
     fwhm_minor = g_par.y_fwhm * dtheta
     fwhm_mean = (fwhm_major + fwhm_minor) / 2.
     return g_par, fwhm_major, fwhm_minor, fwhm_mean
+
 
 @runtime_report
 def plot_all_panels(positions, title='', labels=[], frequency=5, nyq_sample=None,
@@ -1134,7 +1150,7 @@ def plot_all_panels(positions, title='', labels=[], frequency=5, nyq_sample=None
         ax_ant.plot(pos[:, 0], pos[:, 1], 'o', label=lab,
                     color=colors[idx % len(colors)])
         ax_ant_zoom.plot(pos[:, 0], pos[:, 1], 'o', label=lab,
-                    color=colors[idx % len(colors)])
+                         color=colors[idx % len(colors)])
     ax_ant.set_xlabel("X [m]")
     ax_ant.set_ylabel("Y [m]")
     ax_ant.set_aspect('equal')
@@ -1163,7 +1179,7 @@ def plot_all_panels(positions, title='', labels=[], frequency=5, nyq_sample=None
         ax_uvcov.plot(uv[:, 0], uv[:, 1], '.', markersize=1,
                       label=lab, color=colors[idx % len(colors)])
         ax_uvcov_zoom.plot(uv[:, 0], uv[:, 1], '.', markersize=1,
-                      label=lab, color=colors[idx % len(colors)])
+                           label=lab, color=colors[idx % len(colors)])
     ax_uvcov.set_xlabel("u [m]")
     ax_uvcov.set_ylabel("v [m]")
     ax_uvcov.set_aspect('equal')
@@ -1202,7 +1218,7 @@ def plot_all_panels(positions, title='', labels=[], frequency=5, nyq_sample=None
         u_min, u_max = np.min(uv[:, 0]), np.max(uv[:, 0])
         v_min, v_max = np.min(uv[:, 1]), np.max(uv[:, 1])
         H_natural, xedges, yedges = np.histogram2d(uv[:, 0], uv[:, 1], bins=grid_size,
-                                           range=[[u_min, u_max], [v_min, v_max]])
+                                                   range=[[u_min, u_max], [v_min, v_max]])
 
         # Assign each bin with a nonzero value to 1 (uniform weighting).
         H_uniform = H_natural.copy()
@@ -1218,14 +1234,16 @@ def plot_all_panels(positions, title='', labels=[], frequency=5, nyq_sample=None
         C_LIGHT = 3e8
         lambda_m = C_LIGHT / (frequency * 1e9)
         pixel_scale_rad = (grid_size * lambda_m) / \
-            ((u_max - u_min) * padded_size)
+                          ((u_max - u_min) * padded_size)
         pixel_scale_arcsec = pixel_scale_rad * 206265
         fov_arcsec = padded_size * pixel_scale_arcsec
         lab = labels[idx] if (labels and len(labels) == len(pos_list)) else f"Set {idx + 1}"
 
-        g_par_n, fwhm_major_n, fwhm_minor_n, fwhm_mean_n = fit_beam(psf_natural, np.max([u_max, v_max]), pixel_scale_arcsec)
+        g_par_n, fwhm_major_n, fwhm_minor_n, fwhm_mean_n = fit_beam(psf_natural, np.max([u_max, v_max]),
+                                                                    pixel_scale_arcsec)
         print(f'Set {idx + 1}: Beam (Natural) FWHM Major: {fwhm_major_n:.2f} arcsec, Minor: {fwhm_minor_n:.2f}"')
-        g_par_u, fwhm_major_u, fwhm_minor_u, fwhm_mean_u = fit_beam(psf_uniform, np.max([u_max, v_max]), pixel_scale_arcsec)
+        g_par_u, fwhm_major_u, fwhm_minor_u, fwhm_mean_u = fit_beam(psf_uniform, np.max([u_max, v_max]),
+                                                                    pixel_scale_arcsec)
         print(f'Set {idx + 1}: Beam (Uniform) FWHM Major: {fwhm_major_u:.2f} arcsec, Minor: {fwhm_minor_u:.2f}"')
         g_par_n.x_mean = padded_size / 2
         g_par_n.y_mean = padded_size / 2
@@ -1239,32 +1257,34 @@ def plot_all_panels(positions, title='', labels=[], frequency=5, nyq_sample=None
         fwhm_pixels_n = fwhm_mean_n / pixel_scale_arcsec
         annulus_mask_n = (r >= 1.5 * fwhm_pixels_n) & (r <= 5 * fwhm_pixels_n)
         sidelobe_rms_n = np.std(psf_natural[annulus_mask_n]) / np.nanmax(psf_natural)
-        print(f'Set {idx + 1}: Sidelobe RMS (Natural): {sidelobe_rms_n*100:.1f}%')
+        print(f'Set {idx + 1}: Sidelobe RMS (Natural): {sidelobe_rms_n * 100:.1f}%')
 
         fwhm_pixels_u = fwhm_mean_u / pixel_scale_arcsec
         annulus_mask_u = (r >= 1.5 * fwhm_pixels_u) & (r <= 5 * fwhm_pixels_u)
         sidelobe_rms_u = np.std(psf_uniform[annulus_mask_u]) / np.nanmax(psf_uniform)
-        print(f'Set {idx + 1}: Sidelobe RMS (Uniform): {sidelobe_rms_u*100:.1f}%')
+        print(f'Set {idx + 1}: Sidelobe RMS (Uniform): {sidelobe_rms_u * 100:.1f}%')
 
         # Plot psf image
-        im_psf_natural = ax_psf_im_natural.imshow(psf_natural, extent=[-fov_arcsec / 2, fov_arcsec / 2, -fov_arcsec / 2, fov_arcsec / 2],
-                               origin='lower', aspect='equal', cmap='viridis', alpha=1)
+        im_psf_natural = ax_psf_im_natural.imshow(psf_natural, extent=[-fov_arcsec / 2, fov_arcsec / 2, -fov_arcsec / 2,
+                                                                       fov_arcsec / 2],
+                                                  origin='lower', aspect='equal', cmap='viridis', alpha=1)
         yi, xi = np.indices(psf_natural.shape)
         model_gauss_n = g_par_n(xi, yi)
         xs = (np.arange(padded_size) - padded_size / 2. + 0.5) * pixel_scale_arcsec
         ys = (np.arange(padded_size) - padded_size / 2. + 0.5) * pixel_scale_arcsec
         if plot_psf_fit:
             ax_psf_im_natural.contour(xs, ys, model_gauss_n, levels=np.array([0.5]) * np.max(model_gauss_n),
-                                      colors='w', linestyles = ':')
+                                      colors='w', linestyles=':')
         ax_psf_im_natural.set_xlabel("RA [arcsec]")
         ax_psf_im_natural.set_ylabel("DEC [arcsec]")
         #plt.colorbar(im_psf_natural, ax=ax_psf_natural)
-        im_psf_uniform = ax_psf_im_uniform.imshow(psf_uniform, extent=[-fov_arcsec / 2, fov_arcsec / 2, -fov_arcsec / 2, fov_arcsec / 2],
-                               origin='lower', aspect='equal', cmap='viridis', alpha=1)
+        im_psf_uniform = ax_psf_im_uniform.imshow(psf_uniform, extent=[-fov_arcsec / 2, fov_arcsec / 2, -fov_arcsec / 2,
+                                                                       fov_arcsec / 2],
+                                                  origin='lower', aspect='equal', cmap='viridis', alpha=1)
         model_gauss_u = g_par_u(xi, yi)
         if plot_psf_fit:
             ax_psf_im_uniform.contour(xs, ys, model_gauss_u, levels=np.array([0.5]) * np.max(model_gauss_u),
-                                      colors='w', linestyles = ':')
+                                      colors='w', linestyles=':')
         ax_psf_im_uniform.set_xlabel("RA [arcsec]")
         ax_psf_im_uniform.set_ylabel("DEC [arcsec]")
         #plt.colorbar(im_psf_uniform, ax=ax_psf_uniform)
@@ -1289,17 +1309,17 @@ def plot_all_panels(positions, title='', labels=[], frequency=5, nyq_sample=None
             sidelobe_rms_n_max = np.nanmax(radial_max_natural[idxr]) / np.nanmax(radial_max_natural)
 
             ax_psf_prof_natural.plot(r_arcsec, radial_mean_natural / np.nanmax(radial_mean_natural),
-                        '--', color=colors[idx % len(colors)], label=lab + ' (mean)')
+                                     '--', color=colors[idx % len(colors)], label=lab + ' (mean)')
             ax_psf_prof_natural.plot(r_arcsec, radial_max_natural / np.nanmax(radial_max_natural),
-                        '-', color=colors[idx % len(colors)], label=lab + ' (max)')
+                                     '-', color=colors[idx % len(colors)], label=lab + ' (max)')
             ax_psf_prof_natural.axvline(fwhm_mean_n, color=colors[idx % len(colors)],
-                                        ls=':',  label=lab + f' FWHM: {fwhm_mean_n:.1f}"')
+                                        ls=':', label=lab + f' FWHM: {fwhm_mean_n:.1f}"')
             ax_psf_prof_natural.plot(np.array([1.5, 5.]) * fwhm_mean_n, [sidelobe_rms_n_max] * 2,
-                                              color=colors[idx % len(colors)], ls='-',
-                                              label=lab + f' Sidelobe Max: {sidelobe_rms_n_max * 100:.1f}%')
+                                     color=colors[idx % len(colors)], ls='-',
+                                     label=lab + f' Sidelobe Max: {sidelobe_rms_n_max * 100:.1f}%')
             ax_psf_prof_natural.plot(np.array([1.5, 5.]) * fwhm_mean_n, [sidelobe_rms_n] * 2,
-                                              color=colors[idx % len(colors)], ls='-',
-                                              label=lab + f' Sidelobe RMS: {sidelobe_rms_n * 100:.1f}%')
+                                     color=colors[idx % len(colors)], ls='-',
+                                     label=lab + f' Sidelobe RMS: {sidelobe_rms_n * 100:.1f}%')
             ax_psf_prof_natural.set_xscale('log')
             ax_psf_prof_natural.set_yscale('log')
             ax_psf_prof_natural.set_xlabel("Radius [arcsec]")
@@ -1316,17 +1336,17 @@ def plot_all_panels(positions, title='', labels=[], frequency=5, nyq_sample=None
             idxr, = np.where((r_arcsec >= 1.5 * fwhm_mean_u) & (r_arcsec <= 5 * fwhm_mean_u))
             sidelobe_rms_u_max = np.nanmax(radial_max_uniform[idxr]) / np.nanmax(radial_max_uniform)
             ax_psf_prof_uniform.plot(r_arcsec, radial_mean_uniform / np.nanmax(radial_mean_uniform),
-                        '--', color=colors[idx % len(colors)], label=lab + ' (mean)')
+                                     '--', color=colors[idx % len(colors)], label=lab + ' (mean)')
             ax_psf_prof_uniform.plot(r_arcsec, radial_max_uniform / np.nanmax(radial_max_uniform),
-                        '-', color=colors[idx % len(colors)], label=lab + ' (max)')
+                                     '-', color=colors[idx % len(colors)], label=lab + ' (max)')
             ax_psf_prof_uniform.axvline(fwhm_mean_u, color=colors[idx % len(colors)],
-                                        ls=':',  label=lab + f' FWHM: {fwhm_mean_u:.1f}"')
+                                        ls=':', label=lab + f' FWHM: {fwhm_mean_u:.1f}"')
             ax_psf_prof_uniform.plot(np.array([1.5, 5.]) * fwhm_mean_u, [sidelobe_rms_u_max] * 2,
-                                              color=colors[idx % len(colors)], ls='-',
-                                              label=lab + f' Sidelobe Max: {sidelobe_rms_u_max * 100:.1f}%')
+                                     color=colors[idx % len(colors)], ls='-',
+                                     label=lab + f' Sidelobe Max: {sidelobe_rms_u_max * 100:.1f}%')
             ax_psf_prof_uniform.plot(np.array([1.5, 5.]) * fwhm_mean_u, [sidelobe_rms_u] * 2,
-                                              color=colors[idx % len(colors)], ls='--',
-                                              label=lab + f' Sidelobe RMS: {sidelobe_rms_u * 100:.1f}%')
+                                     color=colors[idx % len(colors)], ls='--',
+                                     label=lab + f' Sidelobe RMS: {sidelobe_rms_u * 100:.1f}%')
 
             ax_psf_prof_uniform.set_xscale('log')
             ax_psf_prof_uniform.set_yscale('log')
@@ -1339,7 +1359,7 @@ def plot_all_panels(positions, title='', labels=[], frequency=5, nyq_sample=None
             profile = psf_natural[center_y, :]
             x_axis = np.linspace(-fov_arcsec / 2, fov_arcsec / 2, psf_natural.shape[1])
             ax_psf_prof_natural.plot(x_axis, profile / np.nanmax(profile), '-',
-                        color=colors[idx % len(colors)], label=lab)
+                                     color=colors[idx % len(colors)], label=lab)
             ax_psf_prof_natural.set_xscale('log')
             ax_psf_prof_natural.set_yscale('log')
             ax_psf_prof_natural.set_xlabel("U [arcsec]")
@@ -1348,7 +1368,7 @@ def plot_all_panels(positions, title='', labels=[], frequency=5, nyq_sample=None
             # Do the same for uniform PSF
             profile_uniform = psf_uniform[center_y, :]
             ax_psf_prof_uniform.plot(x_axis, profile_uniform / np.nanmax(profile_uniform), '-',
-                        color=colors[idx % len(colors)], label=lab)
+                                     color=colors[idx % len(colors)], label=lab)
             ax_psf_prof_uniform.set_xscale('log')
             ax_psf_prof_uniform.set_yscale('log')
             ax_psf_prof_uniform.set_xlabel("U [arcsec]")
@@ -1359,7 +1379,7 @@ def plot_all_panels(positions, title='', labels=[], frequency=5, nyq_sample=None
             profile = psf_natural[:, center_x]
             y_axis = np.linspace(-fov_arcsec / 2, fov_arcsec / 2, psf_natural.shape[0])
             ax_psf_prof_natural.plot(y_axis, profile / np.nanmax(profile), '-',
-                        color=colors[idx % len(colors)], label=lab)
+                                     color=colors[idx % len(colors)], label=lab)
             ax_psf_prof_natural.set_xscale('log')
             ax_psf_prof_natural.set_yscale('log')
             ax_psf_prof_natural.set_xlabel("V [arcsec]")
@@ -1368,7 +1388,7 @@ def plot_all_panels(positions, title='', labels=[], frequency=5, nyq_sample=None
             # Do the same for uniform PSF
             profile_uniform = psf_uniform[:, center_x]
             ax_psf_prof_uniform.plot(y_axis, profile_uniform / np.nanmax(profile_uniform), '-',
-                        color=colors[idx % len(colors)], label=lab)
+                                     color=colors[idx % len(colors)], label=lab)
             ax_psf_prof_uniform.set_xscale('log')
             ax_psf_prof_uniform.set_yscale('log')
             ax_psf_prof_uniform.set_xlabel("V [arcsec]")
@@ -1377,7 +1397,6 @@ def plot_all_panels(positions, title='', labels=[], frequency=5, nyq_sample=None
         else:
             raise ValueError(
                 "psf_mode must be 'image', 'rprofile' (or 'profile'), 'uprofile', or 'vprofile'")
-
 
     # Panel 4 (bottom row, spanning all columns): UV Sampling Density.
     ax_uvdensity = fig.add_subplot(gs[1, 0])
@@ -1417,7 +1436,7 @@ def plot_all_panels(positions, title='', labels=[], frequency=5, nyq_sample=None
         # compute uv_extent in metres
         λ = C_LIGHT / (frequency * 1e9)
         fft_extent = (3600 * 180 / np.pi) / (pad_factor * Z.shape[0] * smap.scale.axis2.value * 3600) * λ * \
-            amp_norm.shape[0]
+                     amp_norm.shape[0]
         uv_scale = fft_extent / amp_norm.shape[0]
         uv_r = cen_pix * uv_scale
         # twin-y to show FFT profile
@@ -1437,7 +1456,7 @@ def plot_all_panels(positions, title='', labels=[], frequency=5, nyq_sample=None
         # find the center of the array
         center_x, center_y = np.mean(pos[:, 0]), np.mean(pos[:, 1])
         pos_centered = pos - np.array([center_x, center_y])
-        distances = np.sqrt(pos_centered[:, 0]**2 + pos_centered[:, 1]**2)
+        distances = np.sqrt(pos_centered[:, 0] ** 2 + pos_centered[:, 1] ** 2)
         binwidth = 5
         #bins_dist = np.arange(0, np.max(distances) + binwidth, binwidth)
         #counts, bin_edges = np.histogram(distances, bins=bins_dist, density=False)
@@ -1793,7 +1812,9 @@ This script:
   - Simulates an observation and predicts visibilities using the FITS file as the sky model.
 """
 
-def make_diskmodel_from_mhd(modeldir = '../fasr_sim/skymodels/quiet_sun/', npzfile='psi_mhd_20201126_0.2-2GHz_emission_maps.npz',
+
+def make_diskmodel_from_mhd(modeldir='../fasr_sim/skymodels/quiet_sun/',
+                            npzfile='psi_mhd_20201126_0.2-2GHz_emission_maps.npz',
                             tref='2020-11-26T20:45:47', outfitspre='psi_solar_disk_model_20201126', dorotate=False):
     from scipy.ndimage import rotate
     from suncasa.utils import helioimage2fits as helio
@@ -1803,7 +1824,7 @@ def make_diskmodel_from_mhd(modeldir = '../fasr_sim/skymodels/quiet_sun/', npzfi
 
     ia = image()
     f = np.load(modeldir + '/' + npzfile)
-    freqsghz = f['frequencies_Hz']/1e9
+    freqsghz = f['frequencies_Hz'] / 1e9
     tb_array = np.array(f['emission_cube'])  # Stokes I in K
     # find apparent solar radius at the reference time
     rsun_arcsec = sunpy.coordinates.sun.angular_radius(Time(tref)).value
@@ -1850,6 +1871,7 @@ def make_diskmodel_from_mhd(modeldir = '../fasr_sim/skymodels/quiet_sun/', npzfi
         print('Wrote ' + outfits)
         ia.done()
 
+
 def update_fits_header(fits_file, freq_GHz):
     """
     Update the FITS header of the given file:
@@ -1874,8 +1896,9 @@ def update_fits_header(fits_file, freq_GHz):
     hdul.close()
     print(f"Updated {fits_file}: CRVAL3 and RESTFRQ set to {freq_value} Hz")
 
-def calc_model_radial_profile(solar_model, dr=30., tb_min=100., bkg_radius_range=[1.4, 1.6], 
-    snr_min=1.2, reftime='2020-11-26T20:45:47', apply_mask=True, solar_model_out=None):
+
+def calc_model_radial_profile(solar_model, dr=30., tb_min=100., bkg_radius_range=[1.4, 1.6],
+                              snr_min=1.2, reftime='2020-11-26T20:45:47', apply_mask=True, solar_model_out=None):
     '''
     Scale the intensity of the solar model by the off-limb profile.
     '''
@@ -1886,19 +1909,19 @@ def calc_model_radial_profile(solar_model, dr=30., tb_min=100., bkg_radius_range
     hdul = fits.open(solar_model)
     flux = hdul[0].data[0, 0]
     header = hdul[0].header
-    pixscale_x = np.abs(header['CDELT1']) * 3600. # in arcsec
-    pixscale_y = np.abs(header['CDELT2']) * 3600. # in arcsec
-    freqhz  = header['CRVAL3']  # in Hz
+    pixscale_x = np.abs(header['CDELT1']) * 3600.  # in arcsec
+    pixscale_y = np.abs(header['CDELT2']) * 3600.  # in arcsec
+    freqhz = header['CRVAL3']  # in Hz
     print(f"Pixel scale: {pixscale_x:.2f} x {pixscale_y:.2f} arcsec")
     jypx2k = 1.222e6 / (freqhz / 1e9) ** 2 / ((pixscale_x * pixscale_y) / (np.pi / (4 * np.log(2))))
     flux_min = tb_min / jypx2k  # convert to Jy/pixel
-    print(f"Minimum flux threshold: {flux_min:.4f} Jy/pixel at {freqhz/1e9:.2f} GHz")
+    print(f"Minimum flux threshold: {flux_min:.4f} Jy/pixel at {freqhz / 1e9:.2f} GHz")
     dr_pix = int(dr / ((pixscale_x + pixscale_y) / 2.))
     nx = flux.shape[1]
     ny = flux.shape[0]
     hdul.close()
     ics = int(nx / 2)
-    radius_max = np.sqrt(nx**2 + ny**2) / 2
+    radius_max = np.sqrt(nx ** 2 + ny ** 2) / 2
     mean_intensity_profile = []
     radius_list_pix = []
     for radius in np.arange(0., radius_max, dr_pix):
@@ -1913,15 +1936,15 @@ def calc_model_radial_profile(solar_model, dr=30., tb_min=100., bkg_radius_range
         flux_ring[flux_ring < flux_min] = np.nan
         mean_intensity_profile.append(np.nanmean(flux_ring))
         radius_list_pix.append(radius)
-    
+
     mean_intensity_profile = np.array(mean_intensity_profile)
-    
-    radius_list = np.array(radius_list_pix) * pixscale_x # convert to arcsec
+
+    radius_list = np.array(radius_list_pix) * pixscale_x  # convert to arcsec
     idx_bkg = np.where((radius_list >= bkg_radius_range[0] * solar_radius_asec) &
-                            (radius_list <= bkg_radius_range[1] * solar_radius_asec))[0]
+                       (radius_list <= bkg_radius_range[1] * solar_radius_asec))[0]
     background_level = np.nanmean(mean_intensity_profile[idx_bkg])
-    print(f'Background level at {freqhz/1e9:.2f} GHz: {background_level:.4f} Jy/pixel')
-    plt.plot(radius_list, mean_intensity_profile, label=f'{freqhz/1e9:.2f} GHz')
+    print(f'Background level at {freqhz / 1e9:.2f} GHz: {background_level:.4f} Jy/pixel')
+    plt.plot(radius_list, mean_intensity_profile, label=f'{freqhz / 1e9:.2f} GHz')
     idx = np.where(mean_intensity_profile[:idx_bkg[0]] > background_level * snr_min)[0][-1]
     radius_cutoff = radius_list[idx]
     plt.plot(radius_cutoff, mean_intensity_profile[idx], marker='o', fillstyle='full', markersize=8)
@@ -1976,7 +1999,7 @@ def calc_model_radial_profile(solar_model, dr=30., tb_min=100., bkg_radius_range
         plt.figure()
         plt.imshow(img2d, origin='lower', extent=extent, norm=mcolors.LogNorm())
         plt.colorbar(label='Jy/pixel')
-        plt.title(f'Masked solar model at {freqhz/1e9:.2f} GHz')
+        plt.title(f'Masked solar model at {freqhz / 1e9:.2f} GHz')
         plt.xlabel('X (arcsec)')
         plt.ylabel('Y (arcsec)')
         plt.show()
@@ -2035,13 +2058,14 @@ def equivalent_amp_pha_error(phaerr: float, unit: str = 'deg') -> tuple[float, f
     # Equivalent amplitude error (%) = phase error in radians × 100
     amp_pct = phase_rad * 100.0
 
-    return float(phase_pct)/100, float(amp_pct)/100
+    return float(phase_pct) / 100, float(amp_pct) / 100
 
-def generate_caltb(msfile, caltype=['ph','amp', 'mbd'], calerr=[0.05, 0.05, 0.01], caltbdir='./'):
+
+def generate_caltb(msfile, caltype=['ph', 'amp', 'mbd'], calerr=[0.05, 0.05, 0.01], caltbdir='./', pol='R,L'):
     '''
     Generate CASA calibration tables (caltb) to corrupt the visibilities in a Measurement Set (MS) by assuming potential errors in the calibration.
     Default to generate phase (ph), amplitude (amp), and multi-band delay (mhd) calibration tables.
-    The default errors are 5% for phase, 5% for amplitude, and 0.01 ns for multi-band delay.
+    The default errors are 5% of a radian, 5% for amplitude, and 0.01 ns for multi-band delay.
     Parameters:
         msfile : str
             Path to the Measurement Set file.
@@ -2066,32 +2090,197 @@ def generate_caltb(msfile, caltype=['ph','amp', 'mbd'], calerr=[0.05, 0.05, 0.01
         if cal == 'ph':
             # Generate phase calibration table
             err = calerr[caltype.index(cal)]
-            err_deg = np.rad2deg(err * 2 * np.pi)
             # write in degrees.
+            err_deg = np.rad2deg(err)
             caltable = f'{caltbdir}/caltb_FASR_corrupt_{err_deg:.0f}deg.ph'
             os.system(f'rm -rf {caltable}')
-            pha = np.degrees(np.random.normal(0, err*2*np.pi, nant))
-            gencal(vis=msfile, caltable=caltable, caltype='ph', antenna=antlist, parameter=pha.flatten().tolist())
+            if pol == '':
+                pha = np.degrees(np.random.normal(0, err, nant))
+            elif pol == 'R,L':
+                pha = np.degrees(np.random.normal(0, err, (nant, 2)))
+            else:
+                raise ValueError("pol must be '' or 'R,L'")
+            gencal(vis=msfile, caltable=caltable, caltype='ph', antenna=antlist,
+                   pol=pol, parameter=pha.flatten().tolist())
             print(f"Generated phase calibration table: {caltable}")
         elif cal == 'amp':
             # Generate amplitude calibration table
             err = calerr[caltype.index(cal)]
-            caltable = f'caltb_FASR_corrupt_{np.int_(err*100)}pct.amp'
+            caltable = f'{caltbdir}/caltb_FASR_corrupt_{np.int_(err * 100)}pct.amp'
             os.system(f'rm -rf {caltable}')
-            amp = np.random.normal(1, err, nant)
-            gencal(vis=msfile, caltable=caltable, caltype='amp', antenna=antlist, parameter=amp.tolist())
+            if pol == '':
+                amp = np.random.normal(1, err, nant)
+            elif pol == 'R,L':
+                amp = np.random.normal(1, err, (nant, 2))
+            else:
+                raise ValueError("pol must be '' or 'R,L'")
+            gencal(vis=msfile, caltable=caltable, caltype='amp', antenna=antlist,
+                   pol=pol, parameter=amp.flatten().tolist())
             print(f"Generated amplitude calibration table: {caltable}")
         elif cal == 'mbd':
             # Generate multi-band delay calibration table
             err = calerr[caltype.index(cal)]
-            caltable = f'caltb_FASR_corrupt_{err}ns.mbd'
+            caltable = f'{caltbdir}/caltb_FASR_corrupt_{err}ns.mbd'
             os.system(f'rm -rf {caltable}')
-            mbd = np.random.normal(0, err, nant)
-            gencal(vis=msfile, caltable=caltable, caltype='mbd', antenna=antlist, parameter=mbd.tolist())
+            if pol == '':
+                mbd = np.random.normal(0, err, nant)
+            elif pol == 'R,L':
+                mbd = np.random.normal(0, err, (nant, 2))
+            else:
+                raise ValueError("pol must be '' or 'R,L'")
+            gencal(vis=msfile, caltable=caltable, caltype='mbd', antenna=antlist, pol=pol,
+                   parameter=mbd.flatten().tolist())
             print(f"Generated multi-band delay calibration table: {caltable}")
         gaintable.append(caltable)
 
     return gaintable
+
+
+def plot_caltb_stats(caltb_files, caltype=None, yrange=None):
+    '''
+    Plot statistics of the calibration tables.
+    Parameters:
+        caltb_files : list of str or str
+            List of calibration table files to plot.
+    '''
+    from casatools import table
+    import matplotlib.pyplot as plt
+
+    if isinstance(caltb_files, str):
+        caltb_files = [caltb_files]
+
+    for caltb in caltb_files:
+        tb = table()
+        print('Opening calibration table:', caltb)
+        tb.open(caltb)
+        data = tb.getcol('CPARAM')
+        print(f'Shape of the data in {caltb}: {data.shape}')
+        tb.close()
+
+        # Plot antenna phase/amplitude/multi-band delay vs antenna index for each polarization
+        # first, create two subplots: one for antenna-based values, one for histogram
+        fig = plt.figure(figsize=(12, 5))
+        axes = fig.subplots(1, 2)
+
+        if caltype is None:
+            if 'ph' in caltb:
+                caltype = 'ph'
+            elif 'amp' in caltb:
+                caltype = 'amp'
+            elif 'mbd' in caltb:
+                caltype = 'mbd'
+            else:
+                raise ValueError("Unknown calibration table type in filename.")
+        elif caltype == 'ph':
+            axes[0].plot(np.angle(data[0, 0, :]), marker='o', linestyle='None', color='r', label='Pol 0')
+            axes[0].plot(np.angle(data[1, 0, :]), marker='o', linestyle='None', color='g', label='Pol 1')
+            axes[0].legend()
+            axes[0].set_ylim(yrange) if yrange is not None else None
+            axes[0].set_xlabel('Antenna Index')
+            axes[0].set_ylabel('Phase Error (radians)')
+            axes[0].set_title(f'Phase Calibration Table: {caltb}')
+
+            axes[1].hist(np.angle(data[0, 0, :]), bins=30, alpha=0.3, color='r')
+            axes[1].hist(np.angle(data[1, 0, :]), bins=30, alpha=0.3, color='b')
+            axes[1].set_xlim(yrange) if yrange is not None else None
+            axes[1].set_title('Phase Error Distribution')
+            axes[1].set_xlabel('Phase Error (radians)')
+            axes[1].set_ylabel('Number of Antennas')
+            axes[1].grid()
+        elif caltype == 'amp':
+            axes[0].plot(np.abs(data[0, 0, :]), marker='o', linestyle='None', color='r', label='Pol 0')
+            axes[0].plot(np.abs(data[1, 0, :]), marker='o', linestyle='None', color='g', label='Pol 1')
+            axes[0].legend()
+            axes[0].set_ylim(yrange) if yrange is not None else None
+            axes[0].set_xlabel('Antenna Index')
+            axes[0].set_ylabel('Amplitude Gain')
+            axes[0].set_title(f'Amplitude Calibration Table: {caltb}')
+
+            axes[1].hist(np.abs(data[0, 0, :]), bins=30, alpha=0.3, color='r')
+            axes[1].hist(np.abs(data[1, 0, :]), bins=30, alpha=0.3, color='b')
+            axes[1].set_xlim(yrange) if yrange is not None else None
+            axes[1].set_title('Amplitude Gain Distribution')
+            axes[1].set_xlabel('Amplitude Gain')
+            axes[1].set_ylabel('Number of Antennas')
+            axes[1].grid()
+        elif caltype == 'mbd':
+            axes[0].plot(np.abs(data[0, 0, :]), marker='o', linestyle='None', color='r', label='Pol 0')
+            axes[0].plot(np.abs(data[1, 0, :]), marker='o', linestyle='None', color='g', label='Pol 1')
+            axes[0].set_ylim(yrange) if yrange is not None else None
+            axes[0].legend()
+            axes[0].set_xlabel('Antenna Index')
+            axes[0].set_ylabel('Multi-Band Delay (ns)')
+            axes[0].set_title(f'Multi-Band Delay Calibration Table: {caltb}')
+
+            axes[1].hist(np.abs(data[0, 0, :]), bins=30, alpha=0.3, color='r')
+            axes[1].hist(np.abs(data[1, 0, :]), bins=30, alpha=0.3, color='b')
+            axes[1].set_xlim(yrange) if yrange is not None else None
+            axes[1].set_title('Multi-Band Delay Distribution')
+            axes[1].set_xlabel('Multi-Band Delay (ns)')
+        else:
+            raise ValueError("Unknown calibration table type.")
+
+        plt.ylabel('Number of Antennas')
+        plt.grid()
+        plt.show()
+
+
+def compare_two_gaintables(caltb1, caltb2, caltype=None, yrange=None):
+    '''
+    Compare two calibration tables by plotting their differences.
+    Parameters:
+        caltb1 : str
+            Path to the first calibration table file.
+        caltb2 : str
+            Path to the second calibration table file.
+    '''
+    from casatools import table
+    import matplotlib.pyplot as plt
+
+    tb1 = table()
+    tb1.open(caltb1)
+    data1 = tb1.getcol('CPARAM')
+    tb1.close()
+
+    tb2 = table()
+    tb2.open(caltb2)
+    data2 = tb2.getcol('CPARAM')
+    tb2.close()
+
+    if caltype is None:
+        if 'ph' in caltb1:
+            caltype = 'ph'
+        elif 'amp' in caltb1:
+            caltype = 'amp'
+        elif 'mbd' in caltb1:
+            caltype = 'mbd'
+        else:
+            raise ValueError("Unknown calibration table type in filename.")
+
+    if caltype == 'ph':
+        diff = np.angle(data1) - np.angle(data2)
+        ylabel = 'Phase Difference (radians)'
+    elif caltype == 'amp':
+        diff = np.abs(data1) / np.abs(data2)
+        ylabel = 'Amplitude Difference (ratio)'
+    elif caltype == 'mbd':
+        diff = np.abs(data1) - np.abs(data2)
+        ylabel = 'Multi-Band Delay Difference (ns)'
+    else:
+        raise ValueError("Unknown calibration table type.")
+
+    plt.figure()
+    plt.plot(diff[0, 0, :], marker='o', linestyle='None', color='r', label='Pol 0')
+    plt.plot(diff[1, 0, :], marker='o', linestyle='None', color='g', label='Pol 1')
+    if yrange is not None:
+        plt.ylim(yrange)
+    plt.xlabel('Antenna Index')
+    plt.ylabel(ylabel)
+    plt.title(f'Comparison of {caltype} Calibration Tables')
+    plt.legend()
+    plt.grid()
+    plt.show()
+
 
 @runtime_report
 def get_local_noon_utc(cfg_path: str, date: datetime = None) -> Time:
@@ -2140,6 +2329,8 @@ def get_local_noon_utc(cfg_path: str, date: datetime = None) -> Time:
     sun_altitudes = get_sun(times).transform_to(frame).alt
     idx_noon = np.argmax(sun_altitudes)
     return times[idx_noon]
+
+
 # Example usage:
 # noon_utc = get_local_noon_utc("observatory.cfg")
 # print("Local noon (UTC):", noon_utc.iso)
@@ -2182,12 +2373,13 @@ def calc_total_flux_on_dish(solar_model, dish_diameter=1.5, freqghz=None):
     flux_masked = np.copy(flux)
     flux_masked[mask] = np.nan
     if header['bunit'].lower() in ['jy/px', 'jy/pixel']:
-        total_flux = np.nansum(flux_masked) / 1e4 # Total flux in sfu units.
+        total_flux = np.nansum(flux_masked) / 1e4  # Total flux in sfu units.
         print(f'Total flux within primary beam used to calcuate the antenna temperature: {total_flux:.1f} sfu')
     else:
         raise ValueError(f"Unsupported brightness unit in FITS header: {header['bunit']}")
     hdul.close()
     return total_flux
+
 
 @runtime_report
 def generate_ms(config_file, solar_model, reftime, freqghz=None, channel_width_mhz=10,
@@ -2289,7 +2481,7 @@ def generate_ms(config_file, solar_model, reftime, freqghz=None, channel_width_m
                  x=x, y=y, z=z,
                  dishdiameter=dish_dia[0],
                  mount='alt-az',
-                 antname=list(ant_names), ## must be a list of strings. np.array will not work.
+                 antname=list(ant_names),  ## must be a list of strings. np.array will not work.
                  padname="FASR",
                  coordsystem='global')
 
@@ -2362,8 +2554,10 @@ def generate_ms(config_file, solar_model, reftime, freqghz=None, channel_width_m
         pass
         # sm.setnoise(mode='tsys-atm', trx=500)
     else:
-        noisejy, sigma_na, sigma_un = calc_noise(tsys, config_file, dish_diameter=np.min(dish_dia), total_flux=total_flux, duration=duration,
-                             integration_time=integration_time, channel_width_mhz=channel_width_mhz, freqghz=freq_GHz)
+        noisejy, sigma_na, sigma_un = calc_noise(tsys, config_file, dish_diameter=np.min(dish_dia),
+                                                 total_flux=total_flux, duration=duration,
+                                                 integration_time=integration_time, channel_width_mhz=channel_width_mhz,
+                                                 freqghz=freq_GHz)
         sm.setnoise(mode='simplenoise', simplenoise=f'{noisejy:.2f}Jy')
         sm.corrupt()
     sm.done()
@@ -2425,11 +2619,386 @@ def plot_casa_image(image_filename, crop_fraction=(0.0, 1.0), figsize=(10, 7), t
 
     return fig, ax
 
+def calc_image_rms_snr(pix, rms_mask_radius, pixscale, solar_radius_arcsec=960.):
+    """Compute RMS noise outside a circular mask, plus peak, min, SNR, and the mask.
+
+    Parameters:
+        pix (ndarray): 2D image array. Need to be centered on the solar disk.
+        rms_mask_radius (float): Mask radius in units of solar radii.
+        pixscale (float): Pixel scale in arcsec.
+        solar_radius_arcsec (float): Solar radius in arcsec.
+
+    Returns:
+        (rms, datamax, datamin, snr, mask_outside):
+            rms: standard-deviation noise outside the mask.
+            datamax: maximum pixel value.
+            datamin: minimum pixel value.
+            snr: peak-to-noise ratio.
+            mask_outside: boolean mask, True for pixels **outside** the mask radius.
+    """
+    shape = pix.shape[0]
+    ics = int(shape / 2)
+    radius_pix = int(solar_radius_arcsec * rms_mask_radius / pixscale)
+    y, x = np.ogrid[-ics:shape - ics, -ics:shape - ics]
+    mask_inside = x * x + y * y <= radius_pix * radius_pix
+    mask_outside = ~mask_inside
+    rms = np.std(pix[mask_outside])
+    datamax = np.nanmax(pix)
+    datamin = np.nanmin(pix)
+    snr = datamax / rms if rms > 0 else np.inf
+    return rms, datamax, datamin, snr, mask_outside
+
+
+def calculate_rms_from_image(input_image, rms_mask_radius=1.2, solar_radius_arcsec=960.):
+    """Convenience wrapper: read a CASA image and compute RMS outside a circular mask.
+
+    Parameters:
+        input_image (str): Path to the CASA image file.
+        rms_mask_radius (float): Mask radius in units of solar radii.
+        solar_radius_arcsec (float): Solar radius in arcsec.
+
+    Returns:
+        (rms, mask_outside): RMS noise and boolean mask (True = outside the mask radius).
+    """
+    img = read_casa_image_data(input_image)
+    pixscale = (img['pixscale_x'] + img['pixscale_y']) / 2.0
+    rms, _, _, _, mask_outside = calc_image_rms_snr(
+        img['pix'], rms_mask_radius, pixscale, solar_radius_arcsec)
+    return rms, mask_outside
+
+def convolve_model_image_with_template(model_image, template_image, output_model=None, overwrite=True):
+    """
+    Convolve the model_image with the restoring beam from the template_image.
+    Parameters:
+        model_image (str): Path to the model image to be convolved
+        template_image (str): Path to the template image from which to extract the restoring beam
+        output_model (str or None): Path to save the convolved model image. If None, appends '.convolved' to model_image.
+        overwrite (bool): Whether to overwrite the output_model if it already exists
+    Returns:
+        output_model (str): Path to the convolved model image
+    """
+    from casatools import image as IA
+    ia = IA()
+    if output_model is None:
+        output_model = model_image.replace('.im', '.im.convolved')
+    # --- Open the first image and extract data, coordinate system, and restoring beam ---
+    ia.open(template_image)
+    pix1 = ia.getchunk()[:, :, 0, 0]  # assume image shape [nx, ny, 1, 1]
+    csys1 = ia.coordsys()
+    # e.g., returns {'major': {'value': 6.0, 'unit': 'arcsec'},
+    beam = ia.restoringbeam()
+    #                   'minor': {'value': 6.0, 'unit': 'arcsec'},
+    #                   'positionangle': {'value': 0.0, 'unit': 'deg'}}
+    s = ia.summary()
+    bunit = ia.summary()['unit']
+    freqhz = s['refval'][3]
+    ia.close()
+
+    # --- Convolve the second image with the restoring beam from image1 using IA.convolve2d ---
+    # Format beam parameters as strings.
+    major = f"{beam['major']['value']}{beam['major']['unit']}"
+    minor = f"{beam['minor']['value']}{beam['minor']['unit']}"
+    pa = f"{beam['positionangle']['value']}{beam['positionangle']['unit']}"
+
+    if overwrite or not os.path.exists(output_model):
+        # Open the second image and apply convolution.
+        ia.open(model_image)
+        ia.convolve2d(outfile=output_model, axes=[0, 1], type='gauss',
+                      major=major, minor=minor, pa=pa, overwrite=True)
+        ia.close()
+
+    # --- Read the convolved image to extract its pixel data ---
+    ia.open(output_model)
+    pix2 = ia.getchunk()[:, :, 0, 0]
+    csys2 = ia.coordsys()
+    s = ia.summary()
+    bunit = ia.summary()['unit']
+    ia.close()
+    return output_model
+
+def fidelity_evaluation(restored_image, model_image, fidelity_image=None,
+                        doconvolve=True, rms_mask_radius=1.2, n_bins=50, sigma_jy=None,
+                        solar_radius_arcsec=960., do_plot=True, figsize=(12, 5), fontsize=8):
+    """
+    Performs the convolution and calculates the Fidelity Map.
+
+    Parameters:
+        restored_image (str): Path to the restored/cleaned image
+        model_image (str): Path to the model image
+        doconvolve (bool): Whether to convolve the model image to match the restored image's beam;
+                if False, assumes the model image is already convolved.
+
+    Returns:
+        fidelity_map (ndarray): The spatial fidelity values (model / (restored - model))
+        diff_map (ndarray): The difference (Artifacts) map
+        convolved_model (ndarray): The resolution-matched truth
+    """
+    from casatools import image as IA
+    from casatasks import imregrid
+    import os
+    from matplotlib.patches import Circle
+    from matplotlib.colors import LogNorm
+    plt.rcParams.update({'font.size': fontsize})
+
+    ia = IA()
+
+    if doconvolve:
+        # 1. Convolve the Model Image to match the restored image's beam
+        convolved_model_path = convolve_model_image_with_template(
+            model_image=model_image,
+            template_image=restored_image,
+            output_model=model_image.replace('.im', '.im.convolved'),
+            overwrite=True
+        )
+    else:
+        convolved_model_path = model_image
+
+    # 2. Regrid the convolved model to match the restored image's geometry
+    regridded_model_path = convolved_model_path.replace('.convolved', '.convolved.regrid')
+    if os.path.exists(regridded_model_path):
+        os.system(f'rm -rf {regridded_model_path}')
+
+    # 1. Regrid the model image to match the restored image geometry (pixels, direction)
+    imregrid(imagename=convolved_model_path, template=restored_image, output=regridded_model_path, overwrite=True)
+
+    # 3. Extract pixel data from both images
+    ia.open(restored_image)
+    restored_data = ia.getchunk()
+    csys0 = ia.coordsys()
+    cs0_rec = csys0.torecord()
+    pixscale_x = np.degrees(csys0.increment()['numeric'][0]) * 3600.  # arcsec
+    pixscale_y = np.degrees(csys0.increment()['numeric'][1]) * 3600.  # arcsec
+    s = ia.summary()
+    bunit = ia.summary()['unit']
+    freqhz = s['refval'][3]
+    beam = ia.restoringbeam()
+    jybm2k = 1.222e6 / (freqhz / 1e9) ** 2 / (beam['major']['value'] * beam['minor']['value'])
+    ia.close()
+    peak = np.nanmax(restored_data)
+
+    ia.open(regridded_model_path)
+    model_data = ia.getchunk()
+    ia.close()
+
+    # 4. Calculate Fidelity and Difference Maps
+    diff_map = restored_data - model_data
+    noise_floor, mask = calculate_rms_from_image(restored_image, rms_mask_radius=rms_mask_radius,
+                                                 solar_radius_arcsec=solar_radius_arcsec)
+    if sigma_jy is None:
+        sigma_jy = noise_floor  # in Jy/beam
+        print(f'Estimated noise sigma from the restored image: {sigma_jy:.2f} Jy/beam')
+    sigma_k = sigma_jy * jybm2k
+    rms_radius_arcsec = rms_mask_radius * solar_radius_arcsec
+    print(f'RMS noise in the restored image: {noise_floor:.1f}')
+    fidelity_map = np.abs(model_data) / np.maximum(np.abs(diff_map), noise_floor)
+
+    # Mask the region outside the solar disk to avoid artifacts in the fidelity map due to division by small numbers.
+    fidelity_map[mask] = 0.0
+
+    # Convert the fidelity map into CASA image
+    if fidelity_image is None:
+        fidelity_image = restored_image.replace('.im', '.fidelity.im')
+    if os.path.exists(fidelity_image):
+        os.system(f'rm -rf {fidelity_image}')
+    ia.open(restored_image)
+    # set the coordinate system and pixel data for the fidelity image the same as the restored image
+    ia.fromarray(outfile=fidelity_image, pixels=fidelity_map.astype(np.float32), overwrite=True, csys=cs0_rec)
+    ia.close()
+
+    # Calculate statistics of the fidelity image
+    # exclude zero values
+    fidelity_valid = fidelity_map[fidelity_map > 0]
+    model_valid = model_data[fidelity_map > 0]
+    # convert the unit from jy/beam to k
+    model_valid *= jybm2k
+    fidelity_peak = np.max(fidelity_valid)
+    fidelity_mean = np.mean(fidelity_valid)
+    fidelity_median = np.median(fidelity_valid)
+    fidelity_std = np.std(fidelity_valid)
+    print(
+        f'Fidelity Image Statistics - Peak: {fidelity_peak:.2f}, Mean: {fidelity_mean:.2f}, Median: {fidelity_median:.2f}, Std Dev: {fidelity_std:.2f}, SNR: {peak / noise_floor:.2f}')
+
+    if do_plot:
+        # Plot the fidelity map and the model image side by side for visual comparison
+        fig, axs = plt.subplots(1, 2, figsize=figsize)
+        ax0 = axs[0]
+        fidelity_data = fidelity_map[:, :, 0, 0] # assume shape [nx, ny, 1, 1]
+        nx = fidelity_data.shape[1]
+        ny = fidelity_data.shape[0]
+        extent = (-nx / 2 * pixscale_x, nx / 2 * pixscale_x,
+                  -ny / 2 * pixscale_y, ny / 2 * pixscale_y)
+        im0 = ax0.imshow(fidelity_data.transpose(), origin='lower', cmap='viridis', vmin=0, vmax=10, extent=extent)
+
+        # Dotted open circle indicating the RMS mask radius.
+        rms_circle1 = Circle((0.0, 0.0), rms_radius_arcsec,
+                             edgecolor='white', facecolor='none',
+                             linestyle=':', linewidth=1.0)
+        ax0.add_patch(rms_circle1)
+
+        ax0.text(0.98, 0.02, f'Peak Fidelity: {fidelity_peak:.2f}\nMedian Fidelity: {fidelity_median:.2f}\nSNR: {peak / noise_floor:.2f}',
+                 color='white', fontsize=8, ha='right', va='bottom', transform=ax0.transAxes, bbox=dict(facecolor='black', alpha=0.5, pad=5))
+        ax0.text(0.98, 0.98, f'{freqhz / 1e9:.1f} GHz', color='white', fontsize=fontsize,
+                 ha='right', va='top', transform=ax0.transAxes)
+        ax0.set_title('Fidelity Image')
+        ax0.set_xlabel('Solar X (arcsec)')
+        ax0.set_ylabel('Solar Y (arcsec)')
+        plt.colorbar(im0)
+
+        ax1 = axs[1]
+        model_data_2d = model_data[:, :, 0, 0] * jybm2k# assume shape [nx, ny, 1, 1]
+        im1 = ax1.imshow(model_data_2d.transpose(), origin='lower', cmap='hinodexrt',
+                         vmin=np.nanpercentile(model_data_2d, 1), vmax=np.nanpercentile(model_data_2d, 99), extent=extent)
+        ax1.text(0.98, 0.98, f'{freqhz / 1e9:.1f} GHz', color='white', fontsize=fontsize,
+                 ha='right', va='top', transform=ax1.transAxes)
+        rms_circle2 = Circle((0.0, 0.0), rms_radius_arcsec,
+                             edgecolor='white', facecolor='none',
+                             linestyle=':', linewidth=1.0)
+        ax1.add_patch(rms_circle2)
+        ax1.set_title('Convolved Model Image')
+        ax1.set_xlabel('Solar X (arcsec)')
+        ax1.set_ylabel('Solar Y (arcsec)')
+        cbar = plt.colorbar(im1, ax=ax1, label=r'T$_B$ [K]')
+        cticks = cbar.ax.get_yticks()
+        ctick_labels = [f'{tick:.0e}' for tick in cticks]
+        cbar.ax.set_yticklabels(ctick_labels)
+        plt.tight_layout()
+        plt.show()
+
+        # We divide the brightness range into bins and find the Median Fidelity for each bin.
+        bins = np.linspace(np.min(model_valid), np.max(model_valid), n_bins)
+        bin_centers = 0.5 * (bins[1:] + bins[:-1])
+        median_fidelity = []
+
+        # Loop through bins to calculate median
+        for i in range(len(bins) - 1):
+            # Find pixels that fall into this brightness range
+            mask_in_bin = (model_valid >= bins[i]) & (model_valid < bins[i + 1])
+            if np.any(mask_in_bin):
+                median_fidelity.append(np.median(fidelity_valid[mask_in_bin]))
+            else:
+                median_fidelity.append(np.nan)  # Handle empty bins
+
+        # 4. Generate the Plot
+        fig_stat = plt.figure(figsize=(10, 6))
+
+        # A. The 2D Histogram (Heatmap)
+        # Use LogNorm because there are way more Quiet Sun pixels than Active Region pixels
+        h = plt.hist2d(model_valid / 1e6, fidelity_valid, bins=n_bins, cmap='inferno', norm=LogNorm())
+        plt.colorbar(h[3], label='Number of Pixels (Log Scale)')
+
+        # B. The Trend Line (Median Performance)
+        plt.plot(bin_centers / 1e6, median_fidelity, 'c-', linewidth=3, marker='o',
+                 markeredgecolor='k', label='Median Fidelity')
+
+        # C. Formatting
+        plt.title(f'Fidelity Analysis: Recovery by Source Brightness at {freqhz / 1e9:.1f} GHz')
+        plt.xlabel(f'Model Brightness (MK)')
+        plt.ylabel('Fidelity (Signal / Error)')
+        plt.grid(True, linestyle='--', alpha=0.5)
+
+        # Optional: Draw a "Good Science" line at Fidelity=3 or 5
+        plt.axhline(y=5.0, color='r', linestyle='--', linewidth=2, label='"Good Science" Threshold (F=5)')
+        plt.axvline(x=sigma_k * 5 / 1e6, color='k', linestyle='--', linewidth=2, label=r'$5\sigma_T$ ' + f'({sigma_k / 1e6:.4f} MK)')
+        plt.legend()
+
+        plt.tight_layout()
+        plt.show()
+        return fidelity_image, noise_floor, peak, fig, axs, fig_stat
+    else:
+        return fidelity_image, noise_floor, peak
+
+
+def read_casa_image_data(image_filename):
+    """Open a CASA image and return pixel data, coordinate metadata, and beam info.
+
+    Parameters:
+        image_filename (str): Path to the CASA image file.
+
+    Returns:
+        dict with keys: pix, beam, bunit, freqhz, pixscale_x, pixscale_y, nx, ny, extent
+    """
+    from casatools import image as IA
+    ia = IA()
+    ia.open(image_filename)
+    pix = ia.getchunk()[:, :, 0, 0]  # assume shape [nx, ny, 1, 1]
+    csys = ia.coordsys()
+    try:
+        beam = ia.restoringbeam()
+    except Exception:
+        beam = None
+    s = ia.summary()
+    bunit = s['unit']
+    freqhz = s['refval'][3]
+    ia.close()
+
+    rad_to_deg = 180.0 / np.pi
+    pixscale_x = abs(csys.increment()['numeric'][0]) * rad_to_deg * 3600.0
+    pixscale_y = abs(csys.increment()['numeric'][1]) * rad_to_deg * 3600.0
+    nx, ny = pix.shape
+    extent = (-nx / 2 * pixscale_x, nx / 2 * pixscale_x,
+              -ny / 2 * pixscale_y, ny / 2 * pixscale_y)
+
+    return {
+        'pix': pix, 'beam': beam, 'bunit': bunit, 'freqhz': freqhz,
+        'pixscale_x': pixscale_x, 'pixscale_y': pixscale_y,
+        'nx': nx, 'ny': ny, 'extent': extent
+    }
+
+
+def convert_flux_to_tb(pix, bunit, freqhz, beam, pixscale_x, pixscale_y):
+    """Convert pixel flux values to brightness temperature (K).
+
+    Parameters:
+        pix (ndarray): 2D pixel data.
+        bunit (str): Unit string from the image ('Jy/beam', 'Jy/pixel', or 'K').
+        freqhz (float): Observing frequency in Hz.
+        beam (dict): Restoring beam dict with 'major' and 'minor' sub-dicts.
+        pixscale_x, pixscale_y (float): Pixel scales in arcsec.
+
+    Returns:
+        (pix_k, conv_factor) – the converted array and the conversion factor used.
+    """
+    if bunit.lower() == 'jy/beam':
+        factor = 1.222e6 / (freqhz / 1e9) ** 2 / (beam['major']['value'] * beam['minor']['value'])
+    elif bunit.lower() == 'jy/pixel':
+        factor = 1.222e6 / (freqhz / 1e9) ** 2 / ((pixscale_x * pixscale_y) / (np.pi / (4 * np.log(2))))
+    elif bunit.lower() == 'k':
+        return pix.copy(), 1.0
+    else:
+        return pix.copy(), 1.0
+    return pix * factor, factor
+
+
+def crop_image(pix, crop_fraction):
+    """Crop a 2D image array according to fractional bounds.
+
+    Parameters:
+        pix (ndarray): 2D image array (assumed square).
+        crop_fraction: Either a (start, end) float tuple, or a pair of (start, end) tuples
+                       for x and y separately, or anything else (returns pix unchanged).
+
+    Returns:
+        Cropped 2D array.
+    """
+    shape = pix.shape[0]
+    if isinstance(crop_fraction[0], float):
+        p1 = int(shape * crop_fraction[0])
+        p2 = int(shape * crop_fraction[1])
+        return pix[p1:p2, p1:p2]
+    elif isinstance(crop_fraction[0], (tuple, list)):
+        px1 = int(shape * crop_fraction[0][0])
+        px2 = int(shape * crop_fraction[0][1])
+        py1 = int(shape * crop_fraction[1][0])
+        py2 = int(shape * crop_fraction[1][1])
+        return pix[px1:px2, py1:py2]
+    return pix
+
+
 @runtime_report
 def plot_two_casa_images_with_convolution(image1_filename, image2_filename,
                                           crop_fraction=(0.0, 1.0), rms_mask_radius=1.2, reftime=None,
-                                          figsize=(15, 4),
-                                          image_meta={'freq': '', 'title': ['', ''],'array_config': ''},
+                                          figsize=(12, 5),
+                                          image_meta={'freq': '', 'title': ['', ''], 'array_config': ''},
                                           compare_two=False,
                                           contour_levels=None, cmap='viridis',
                                           conv_tag='',
@@ -2467,7 +3036,7 @@ def plot_two_casa_images_with_convolution(image1_filename, image2_filename,
     from sunpy import coordinates
     from astropy.time import Time
     if reftime is None:
-        reftime=Time.now()
+        reftime = Time.now()
     solar_radius_asec = coordinates.sun.angular_radius(reftime).value
 
     plt.rcParams.update({'font.size': fontsize})
@@ -2485,161 +3054,63 @@ def plot_two_casa_images_with_convolution(image1_filename, image2_filename,
     weighting = image_meta.get('weighting', None)
     if not compare_two:
         figsize = (figsize[0] / 3 * 2, figsize[1])
-    ia = IA()
-    # --- Open the first image and extract data, coordinate system, and restoring beam ---
-    ia.open(image1_filename)
-    pix1 = ia.getchunk()[:, :, 0, 0]  # assume image shape [nx, ny, 1, 1]
-    csys1 = ia.coordsys()
-    # e.g., returns {'major': {'value': 6.0, 'unit': 'arcsec'},
-    beam = ia.restoringbeam()
-    #                   'minor': {'value': 6.0, 'unit': 'arcsec'},
-    #                   'positionangle': {'value': 0.0, 'unit': 'deg'}}
-    s = ia.summary()
-    bunit = ia.summary()['unit']
-    freqhz = s['refval'][3]
-    ia.close()
+    # --- Read image1 (restored image) ---
+    img1 = read_casa_image_data(image1_filename)
+    beam = img1['beam']
+    freqhz = img1['freqhz']
+    pixscale_x = img1['pixscale_x']
+    pixscale_y = img1['pixscale_y']
+    extent = img1['extent']
 
-    # Build an Astropy WCS object using the CASA coordinate system from image1.
-    rad_to_deg = 180.0 / np.pi
-    w = WCS(naxis=2)
-    w.wcs.crpix = csys1.referencepixel()['numeric'][0:2]
-    w.wcs.cdelt = np.array(csys1.increment()['numeric'][0:2]) * rad_to_deg
-    w.wcs.crval = np.array(csys1.referencevalue()['numeric'][0:2]) * rad_to_deg
-    w.wcs.ctype = ['RA---SIN', 'DEC--SIN']
-    pixscale_x = abs(w.wcs.cdelt[0]) * 3600.0
-    pixscale_y = abs(w.wcs.cdelt[1]) * 3600.0
-    nx = pix1.shape[0]
-    ny = pix1.shape[1]
-    extent = (-nx / 2 * pixscale_x, nx / 2 * pixscale_x,
-                  -ny / 2 * pixscale_y, ny / 2 * pixscale_y)
-
-    # Generate an output filename for the convolved image.
-    output_filename = image2_filename.replace('.im', f'{conv_tag}.im.convolved')
-
-    # --- Convolve the second image with the restoring beam from image1 using IA.convolve2d ---
-    # Format beam parameters as strings.
-    major = f"{beam['major']['value']}{beam['major']['unit']}"
-    minor = f"{beam['minor']['value']}{beam['minor']['unit']}"
-    pa = f"{beam['positionangle']['value']}{beam['positionangle']['unit']}"
-
-    jybm2k = 1.222e6 / (freqhz / 1e9) ** 2 / (beam['major']['value'] * beam['minor']['value'])
-    jypx2k = 1.222e6 / (freqhz / 1e9) ** 2 / ((pixscale_x * pixscale_y) / (np.pi / (4 * np.log(2))))
-    if not (sigma_jy is None):
+    # Convert image1 to brightness temperature
+    pix1, jybm2k = convert_flux_to_tb(
+        img1['pix'], img1['bunit'], freqhz, beam, pixscale_x, pixscale_y)
+    if sigma_jy is not None:
         sigma_tb = float(sigma_jy.rstrip('Jy/beam')) * jybm2k
     else:
-        # Ensure sigma_tb is always numeric to avoid TypeError when formatting.
         sigma_tb = 0.0
-    if bunit.lower() == 'jy/beam':
-        pix1 *= jybm2k
-    elif bunit.lower() == 'jy/pixel':
-        pix1 *= jypx2k
-    elif bunit.lower() == 'k':
-        pass
 
     major_pix = beam['major']['value'] / pixscale_x
     minor_pix = beam['minor']['value'] / pixscale_y
     pa_deg = beam['positionangle']['value']
 
-    if overwrite_conv or not os.path.exists(output_filename):
-        # Open the second image and apply convolution.
-        ia.open(image2_filename)
-        ia.convolve2d(outfile=output_filename, axes=[0, 1], type='gauss',
-                      major=major, minor=minor, pa=pa, overwrite=True)
-        ia.close()
+    # --- Convolve image2 with image1's restoring beam ---
+    output_filename = image2_filename.replace('.im', f'{conv_tag}.im.convolved')
+    convolve_model_image_with_template(
+        model_image=image2_filename,
+        template_image=image1_filename,
+        output_model=output_filename,
+        overwrite=overwrite_conv)
 
-    # --- Read the convolved image to extract its pixel data ---
-    ia.open(output_filename)
-    pix2 = ia.getchunk()[:, :, 0, 0]
-    csys2 = ia.coordsys()
-    s = ia.summary()
-    bunit = ia.summary()['unit']
-    ia.close()
+    # --- Read convolved image2 ---
+    img2 = read_casa_image_data(output_filename)
+    pixscale_x2 = img2['pixscale_x']
+    pixscale_y2 = img2['pixscale_y']
+    extent2 = img2['extent']
 
-    w2 = WCS(naxis=2)
-    w2.wcs.crpix = csys2.referencepixel()['numeric'][0:2]
-    w2.wcs.cdelt = np.array(csys2.increment()['numeric'][0:2]) * rad_to_deg
-    w2.wcs.crval = np.array(csys2.referencevalue()['numeric'][0:2]) * rad_to_deg
-    w2.wcs.ctype = ['RA---SIN', 'DEC--SIN']
-    pixscale_x2 = abs(w2.wcs.cdelt[0]) * 3600.0
-    pixscale_y2 = abs(w2.wcs.cdelt[1]) * 3600.0
-    nx2 = pix2.shape[0]
-    ny2 = pix2.shape[1]
-    extent2 = (-nx2 / 2 * pixscale_x2, nx2 / 2 * pixscale_x2,
-                  -ny2 / 2 * pixscale_y2, ny2 / 2 * pixscale_y2)
+    # Convert image2 to brightness temperature (use image1's beam for Jy/beam→K)
+    pix2, _ = convert_flux_to_tb(
+        img2['pix'], img2['bunit'], freqhz, beam, pixscale_x2, pixscale_y2)
 
-    if bunit.lower() == 'jy/beam':
-        jybm2k = 1.222e6 / (freqhz / 1e9) ** 2 / (beam['major']['value'] * beam['minor']['value'])
-        pix2 *= jybm2k
-    elif bunit.lower() == 'jy/pixel':
-        jypx2k = 1.222e6 / (freqhz / 1e9) ** 2 / ((pixscale_x2 * pixscale_y2) / (np.pi / (4 * np.log(2))))
-        pix2 *= jypx2k
-    elif bunit.lower() == 'k':
-        pass
-
-    # --- Crop both images using the same crop_fraction ---
-    shape1 = pix1.shape[0]  # assume square images.
-    shape2 = pix2.shape[0]
-
-    print(f'Applying a mask of {rms_mask_radius:.1f} solar radii to calcuate rms outside of it.')
-    # Mask out the solar disk to calculate RMS
-    ics = int(shape1 / 2)
-    radius_pix = int(960 * rms_mask_radius / pixscale_x)  # masking out rms_mask_radius x Rsun
-    y, x = np.ogrid[-ics:shape1 - ics, -ics:shape1 - ics]
-    mask = x * x + y * y <= radius_pix * radius_pix
-    pix1_masked = np.copy(pix1)
-    pix1_masked[mask] = np.nan
-    cropped1_rms = np.sqrt(np.nanmean(pix1_masked**2))
-    # Crop the corner of the image to calculate RMS for SNR estimation
-    #crop_fraction_rms = (0.9, 1.0)
-    #p1_rms = int(shape1 * crop_fraction_rms[0])
-    #p2_rms = int(shape1 * crop_fraction_rms[1])
-    datamax1 = np.nanmax(pix1)
-    #cropped1_rms = pix1[p1_rms:p2_rms, p1_rms:p2_rms]
-    rms1 = np.sqrt(np.nanmean(cropped1_rms**2))
-    print(f'Peak of {os.path.basename(image1_filename)}: {np.nanmax(pix1):.3e} K')
+    # --- RMS and SNR (masking out the solar disk) ---
+    print(f'Applying a mask of {rms_mask_radius:.1f} solar radii to calculate rms outside of it.')
+    rms1, datamax1, _, snr1, _ = calc_image_rms_snr(
+        pix1, rms_mask_radius, pixscale_x, solar_radius_asec)
+    print(f'Peak of {os.path.basename(image1_filename)}: {datamax1:.3e} K')
     print(f'rms of {os.path.basename(image1_filename)} (excluding solar disk): {rms1:.3e} K')
-    snr1 = datamax1 / rms1
     print(f'SNR of the image: {snr1:.1f}')
 
-    # For image2
-    ics = int(shape2 / 2)
-    radius_pix2 = int(960 * rms_mask_radius / pixscale_x2)  # masking out rms_mask_radius x Rsun
-    y, x = np.ogrid[-ics:shape2 - ics, -ics:shape2 - ics]
-    mask2 = x * x + y * y <= radius_pix2 * radius_pix2
-    pix2_masked = np.copy(pix2)
-    pix2_masked[mask2] = np.nan
-    rms2 = np.sqrt(np.nanmean(pix2_masked**2))
-    datamax2 = np.nanmax(pix2)
-    datamin2 = np.nanmin(pix2)
-    snr2 = datamax2 / rms2
+    rms2, datamax2, datamin2, snr2, _ = calc_image_rms_snr(
+        pix2, rms_mask_radius, pixscale_x2, solar_radius_asec)
     print(f'Peak of {os.path.basename(image2_filename)}: {datamax2:.3e} K')
     print(f'rms of {os.path.basename(image2_filename)} (excluding solar disk): {rms2:.3e} K')
 
-    if isinstance(crop_fraction[0], float):
-        pbl1 = int(shape1 * crop_fraction[0])
-        ptr1 = int(shape1 * crop_fraction[1])
-        pbl2 = int(shape2 * crop_fraction[0])
-        ptr2 = int(shape2 * crop_fraction[1])
-        cropped1 = pix1[pbl1:ptr1, pbl1:ptr1]
-        cropped2 = pix2[pbl2:ptr2, pbl2:ptr2]
-    elif isinstance(crop_fraction[0], tuple) or isinstance(crop_fraction[0], list):
-        px1 = int(shape1 * crop_fraction[0][0])
-        px2 = int(shape1 * crop_fraction[0][1])
-        py1 = int(shape1 * crop_fraction[1][0])
-        py2 = int(shape1 * crop_fraction[1][1])
-        cropped1 = pix1[px1:px2, py1:py2]
-        px1 = int(shape2 * crop_fraction[0][0])
-        px2 = int(shape2 * crop_fraction[0][1])
-        py1 = int(shape2 * crop_fraction[1][0])
-        py2 = int(shape2 * crop_fraction[1][1])
-        cropped2 = pix2[px1:px2, py1:py2]
-    else:
-        cropped1 = pix1
-        cropped2 = pix2
-
+    # --- Crop both images ---
+    cropped1 = crop_image(pix1, crop_fraction)
+    cropped2 = crop_image(pix2, crop_fraction)
     datamin1 = np.nanmin(cropped1)
 
-    # Radius (in arcsec) of the mask used to compute the RMS (rms_mask_radius in solar radii).
+    # Radius (in arcsec) of the mask used to compute the RMS.
     rms_radius_arcsec = solar_radius_asec * rms_mask_radius
 
     # --- Plotting: Create a figure with two panels using the WCS projection from image1 ---
@@ -2653,9 +3124,9 @@ def plot_two_casa_images_with_convolution(image1_filename, image2_filename,
         fig, axs = plt.subplots(1, 2, figsize=figsize)
 
     if vmax is None:
-        vmax = 90 # 90% of the maximum
+        vmax = 90  # 90% of the maximum
     if vmin is None:
-        vmin = -1000 / snr1 # set the minimum to 10 * rms (expressed in percentage)
+        vmin = -1000 / snr1  # set the minimum to 10 * rms (expressed in percentage)
     vmax_val = np.nanmax(cropped1) * float(vmax) / 100
     vmin_val = np.nanmax(cropped1) * float(vmin) / 100
     print(f'Plotting image with vmin={vmin_val:.3e} K, vmax={vmax_val:.3e} K')
@@ -2672,9 +3143,9 @@ def plot_two_casa_images_with_convolution(image1_filename, image2_filename,
                      vmax=vmax_val, vmin=vmin_val, extent=extent)
 
     # Beam ellipse.
-    ell = Ellipse((ax1.get_xlim()[0]*0.95, ax1.get_ylim()[0]*0.95),
-                  width=major_pix*pixscale_x, height=minor_pix*pixscale_x,
-                  angle=(-(90-pa_deg)),
+    ell = Ellipse((ax1.get_xlim()[0] * 0.95, ax1.get_ylim()[0] * 0.95),
+                  width=major_pix * pixscale_x, height=minor_pix * pixscale_x,
+                  angle=(-(90 - pa_deg)),
                   edgecolor='white', facecolor='none', lw=1.5)
     ax1.add_patch(ell)
 
@@ -2683,22 +3154,21 @@ def plot_two_casa_images_with_convolution(image1_filename, image2_filename,
                          edgecolor='white', facecolor='none',
                          linestyle=':', linewidth=1.0)
     ax1.add_patch(rms_circle1)
-
-    
     ax1.set_xlabel('Solar X (arcsec)')
     ax1.set_ylabel('Solar Y (arcsec)')
     ax1.set_title(title1)
     ax1.text(0.98, 0.01, r'$\sigma_I$' + f': {sigma_jy}, ' + r'$\sigma_T$' + f': {sigma_tb:.1e}K',
              transform=ax1.transAxes, ha='right', va='bottom', color='white', fontsize=legend_size)
-    ax1.text(0.98, 0.04, r'T$_{B}^{min}$'+f': {datamin1:.1e} K', transform=ax1.transAxes, ha='right',
+    ax1.text(0.98, 0.04, r'T$_{B}^{min}$' + f': {datamin1:.1e} K', transform=ax1.transAxes, ha='right',
              va='bottom', color='white', fontsize=legend_size)
-    ax1.text(0.98, 0.07, r'T$_{B}^{rms}$'+f': {rms1:.1e} K', transform=ax1.transAxes, ha='right',
+    ax1.text(0.98, 0.07, r'T$_{B}^{rms}$' + f': {rms1:.1e} K', transform=ax1.transAxes, ha='right',
              va='bottom', color='white', fontsize=legend_size)
-    ax1.text(0.98, 0.10, r'T$_{B}^{max}$'+f': {datamax1:.1e} K', transform=ax1.transAxes, ha='right',
+    ax1.text(0.98, 0.10, r'T$_{B}^{max}$' + f': {datamax1:.1e} K', transform=ax1.transAxes, ha='right',
              va='bottom', color='white', fontsize=legend_size)
     ax1.text(0.98, 0.13, f'SNR: {snr1:.1f}', transform=ax1.transAxes, ha='right',
              va='bottom', color='white', fontsize=legend_size)
-    ax1.text(0.98, 0.16, r"B$_{maj}$, B$_{min}$" + f": {beam['major']['value']:.1f}" + '"' + f", {beam['minor']['value']:.1f}" + '"',
+    ax1.text(0.98, 0.16,
+             r"B$_{maj}$, B$_{min}$" + f": {beam['major']['value']:.1f}" + '"' + f", {beam['minor']['value']:.1f}" + '"',
              transform=ax1.transAxes, ha='right', va='bottom', color='white', fontsize=legend_size)
     ax1.text(0.98, 0.22, f'Weighting: {weighting}',
              transform=ax1.transAxes, ha='right', va='bottom', color='white', fontsize=legend_size)
@@ -2708,7 +3178,7 @@ def plot_two_casa_images_with_convolution(image1_filename, image2_filename,
              va='top', color='white', fontsize=legend_size)
     ax1.text(0.02, 0.95, f'Dur: {dur}, Band: {bandwidth}', transform=ax1.transAxes, ha='left',
              va='top', color='white', fontsize=legend_size)
-    ax1.text(0.02, 0.92, r'T$_{sys}$' + f': {tsys}, ' + r'T$_{ant}$' + f': {tant}', 
+    ax1.text(0.02, 0.92, r'T$_{sys}$' + f': {tsys}, ' + r'T$_{ant}$' + f': {tant}',
              transform=ax1.transAxes, ha='left', va='top', color='white', fontsize=legend_size)
     ax1.text(0.02, 0.89, f'Cal err: {cal_error}', transform=ax1.transAxes, ha='left',
              va='top', color='white', fontsize=legend_size)
@@ -2730,9 +3200,9 @@ def plot_two_casa_images_with_convolution(image1_filename, image2_filename,
     ax2.set_ylim(ax1.get_ylim())
     ax2.set_title(title2)
 
-    ell = Ellipse((ax2.get_xlim()[0]*0.95, ax2.get_ylim()[0]*0.95),
-                  width=major_pix2*pixscale_x2, height=minor_pix2*pixscale_x2,
-                  angle=(-(90-pa_deg)),
+    ell = Ellipse((ax2.get_xlim()[0] * 0.95, ax2.get_ylim()[0] * 0.95),
+                  width=major_pix2 * pixscale_x2, height=minor_pix2 * pixscale_x2,
+                  angle=(-(90 - pa_deg)),
                   edgecolor='white', facecolor='none', lw=1.5)
     ax2.add_patch(ell)
 
@@ -2741,11 +3211,11 @@ def plot_two_casa_images_with_convolution(image1_filename, image2_filename,
                          edgecolor='white', facecolor='none',
                          linestyle=':', linewidth=1.0)
     ax2.add_patch(rms_circle2)
-    ax2.text(0.98, 0.01, r'T$_{B}^{min}$'+f': {datamin2:.1e} K', transform=ax2.transAxes, ha='right',
+    ax2.text(0.98, 0.01, r'T$_{B}^{min}$' + f': {datamin2:.1e} K', transform=ax2.transAxes, ha='right',
              va='bottom', color='white', fontsize=legend_size)
-    ax2.text(0.98, 0.04, r'T$_{B}^{rms}$'+f': {rms2:.1e} K', transform=ax2.transAxes, ha='right',
+    ax2.text(0.98, 0.04, r'T$_{B}^{rms}$' + f': {rms2:.1e} K', transform=ax2.transAxes, ha='right',
              va='bottom', color='white', fontsize=legend_size)
-    ax2.text(0.98, 0.07, r'T$_{B}^{max}$'+f': {datamax2:.1e} K', transform=ax2.transAxes, ha='right',
+    ax2.text(0.98, 0.07, r'T$_{B}^{max}$' + f': {datamax2:.1e} K', transform=ax2.transAxes, ha='right',
              va='bottom', color='white', fontsize=legend_size)
     ax2.text(0.98, 0.10, f'SNR: {snr2:.1f}', transform=ax2.transAxes, ha='right',
              va='bottom', color='white', fontsize=legend_size)
@@ -2782,18 +3252,19 @@ def plot_two_casa_images_with_convolution(image1_filename, image2_filename,
     plt.tight_layout()
     return fig, axs
 
+
 @runtime_report
 def plot_two_casa_images0(image1_filename, image2_filename,
-                         crop_fraction=(0.0, 1.0),
-                         figsize=(15, 4),
-                         title1='First Image',
-                         title2='Second Image',
-                         compare_two=False,
-                         contour_levels=None, cmap='viridis',
-                         vmax=99.9, vmin=0,
-                         uni_vmaxmin=False,
-                         norm='linear',
-                         image_model_filename=None):
+                          crop_fraction=(0.0, 1.0),
+                          figsize=(15, 4),
+                          title1='First Image',
+                          title2='Second Image',
+                          compare_two=False,
+                          contour_levels=None, cmap='viridis',
+                          vmax=99.9, vmin=0,
+                          uni_vmaxmin=False,
+                          norm='linear',
+                          image_model_filename=None):
     """
     Open two CASA images using casatools.image (IA), convolve the second image
     with the restoring beam from the first image, and plot them side-by-side.
@@ -2949,18 +3420,19 @@ def plot_two_casa_images0(image1_filename, image2_filename,
     plt.tight_layout()
     return fig, axs
 
+
 @runtime_report
 def plot_two_casa_images(image1_filename, image2_filename,
-                          crop_fraction=(0.0, 1.0),
-                          figsize=(15, 4),
-                          image_meta={'freq': '', 'title': ['', ''],'array_config': ['', '']},
-                          contour_levels=None, cmap='viridis',
-                          cmap_model='turbo',
-                          vmax=100.0, vmin=0.0,
-                          vmax_percentile=99.9, vmin_percentile=0,
-                          uni_vmaxmin=False,
-                          image1_model_filename=None,
-                          image2_model_filename=None):
+                         crop_fraction=(0.0, 1.0),
+                         figsize=(15, 4),
+                         image_meta={'freq': '', 'title': ['', ''], 'array_config': ['', '']},
+                         contour_levels=None, cmap='viridis',
+                         cmap_model='turbo',
+                         vmax=100.0, vmin=0.0,
+                         vmax_percentile=99.9, vmin_percentile=0,
+                         uni_vmaxmin=False,
+                         image1_model_filename=None,
+                         image2_model_filename=None):
     """
     Open two CASA images using casatools.image (IA), convolve the second image
     with the restoring beam from the first image, and plot them side-by-side.
@@ -3009,8 +3481,6 @@ def plot_two_casa_images(image1_filename, image2_filename,
     beam1 = ia.restoringbeam()
     ia.close()
 
-
-
     # Build an Astropy WCS object using the CASA coordinate system from image1.
     rad_to_deg = 180.0 / np.pi
     w = WCS(naxis=2)
@@ -3058,9 +3528,6 @@ def plot_two_casa_images(image1_filename, image2_filename,
     # --- Crop both images using the same crop_fraction ---
     shape = pix1.shape[0]  # assume square images.
 
-
-
-
     crop_fraction_rms = (0.9, 1.0)
     p1_rms = int(shape * crop_fraction_rms[0])
     p2_rms = int(shape * crop_fraction_rms[1])
@@ -3068,10 +3535,10 @@ def plot_two_casa_images(image1_filename, image2_filename,
     datamax2 = np.nanmax(pix2)
 
     cropped1_rms = pix1[p1_rms:p2_rms, p1_rms:p2_rms]
-    rms1 = np.sqrt(np.nanmean(cropped1_rms**2))
+    rms1 = np.sqrt(np.nanmean(cropped1_rms ** 2))
     snr1 = datamax1 / rms1
     cropped2_rms = pix2[p1_rms:p2_rms, p1_rms:p2_rms]
-    rms2 = np.sqrt(np.nanmean(cropped2_rms**2))
+    rms2 = np.sqrt(np.nanmean(cropped2_rms ** 2))
     snr2 = datamax2 / rms2
 
     if isinstance(crop_fraction[0], float):
@@ -3104,8 +3571,8 @@ def plot_two_casa_images(image1_filename, image2_filename,
     if image1_model_filename is not None:
         diff1 = np.abs(cropped1_model - cropped1)
         diff2 = np.abs(cropped2_model - cropped2)
-        diff1[diff1 < rms1*0.75] = rms1*0.75
-        diff2[diff2 < rms2*0.75] = rms2*0.75
+        diff1[diff1 < rms1 * 0.75] = rms1 * 0.75
+        diff2[diff2 < rms2 * 0.75] = rms2 * 0.75
         img_fidelity1 = cropped1 / diff1
         img_fidelity2 = cropped2 / diff2
     else:
@@ -3144,22 +3611,22 @@ def plot_two_casa_images(image1_filename, image2_filename,
     ax1.set_xlabel('Right Ascension')
     ax1.set_ylabel('Declination')
     ax1.set_title(title1)
-    ax1.text(0.98,0.02, r'T$_{Bmin}$'+f': {datamin1:.1e} K', transform=ax1.transAxes, ha='right',
-             va='bottom', color='white',)
-    ax1.text(0.98,0.08, r'T$_{Bmax}$'+f': {datamax1:.1e} K', transform=ax1.transAxes, ha='right',
-             va='bottom', color='white',)
-    ax1.text(0.98,0.14, f'SNR: {snr1:.1f}', transform=ax1.transAxes, ha='right',
-             va='bottom', color='white',)
+    ax1.text(0.98, 0.02, r'T$_{Bmin}$' + f': {datamin1:.1e} K', transform=ax1.transAxes, ha='right',
+             va='bottom', color='white', )
+    ax1.text(0.98, 0.08, r'T$_{Bmax}$' + f': {datamax1:.1e} K', transform=ax1.transAxes, ha='right',
+             va='bottom', color='white', )
+    ax1.text(0.98, 0.14, f'SNR: {snr1:.1f}', transform=ax1.transAxes, ha='right',
+             va='bottom', color='white', )
     ax1.text(0.02, 0.02, freqstr, transform=ax1.transAxes, ha='left',
              va='bottom', color='white')
     ax1.text(0.02, 0.98, f'Array cfg: {array_config1}', transform=ax1.transAxes, ha='left',
              va='top', color='white', fontweight='bold')
-    ax1.text(0.02,0.92, f'Dur: {dur}', transform=ax1.transAxes, ha='left',
-             va='top', color='white',)
-    ax1.text(0.02,0.86, f'Themal noise: {noise}', transform=ax1.transAxes, ha='left',
-             va='top', color='white',)
-    ax1.text(0.02,0.80, f'Cal err: {cal_error}', transform=ax1.transAxes, ha='left',
-             va='top', color='white',)
+    ax1.text(0.02, 0.92, f'Dur: {dur}', transform=ax1.transAxes, ha='left',
+             va='top', color='white', )
+    ax1.text(0.02, 0.86, f'Themal noise: {noise}', transform=ax1.transAxes, ha='left',
+             va='top', color='white', )
+    ax1.text(0.02, 0.80, f'Cal err: {cal_error}', transform=ax1.transAxes, ha='left',
+             va='top', color='white', )
     plt.colorbar(im1, ax=ax1, label=r'T$_B$ [K]')
 
     # place ellipse at 10% in from lower-left corner of the panel
@@ -3184,28 +3651,28 @@ def plot_two_casa_images(image1_filename, image2_filename,
     ax2.set_xlabel('Right Ascension')
     ax2.set_ylabel('Declination')
     ax2.set_title(title2)
-    ax2.text(0.98,0.02, r'T$_{Bmin}$'+f': {datamin2:.1e} K', transform=ax2.transAxes, ha='right',
-             va='bottom', color='white',)
-    ax2.text(0.98,0.08, r'T$_{Bmax}$'+f': {datamax2:.1e} K', transform=ax2.transAxes, ha='right',
-             va='bottom', color='white',)
-    ax2.text(0.98,0.14, f'SNR: {snr2:.1f}', transform=ax2.transAxes, ha='right',
-             va='bottom', color='white',)
+    ax2.text(0.98, 0.02, r'T$_{Bmin}$' + f': {datamin2:.1e} K', transform=ax2.transAxes, ha='right',
+             va='bottom', color='white', )
+    ax2.text(0.98, 0.08, r'T$_{Bmax}$' + f': {datamax2:.1e} K', transform=ax2.transAxes, ha='right',
+             va='bottom', color='white', )
+    ax2.text(0.98, 0.14, f'SNR: {snr2:.1f}', transform=ax2.transAxes, ha='right',
+             va='bottom', color='white', )
     ax2.text(0.02, 0.02, freqstr, transform=ax2.transAxes, ha='left',
              va='bottom', color='white')
     ax2.text(0.02, 0.98, f'Array cfg: {array_config2}', transform=ax2.transAxes, ha='left',
              va='top', color='white', fontweight='bold')
-    ax2.text(0.02,0.92, f'Dur: {dur}', transform=ax2.transAxes, ha='left',
-             va='top', color='white',)
-    ax2.text(0.02,0.86, f'Themal noise: {noise}', transform=ax2.transAxes, ha='left',
-             va='top', color='white',)
-    ax2.text(0.02,0.80, f'Cal err: {cal_error}', transform=ax2.transAxes, ha='left',
-             va='top', color='white',)
+    ax2.text(0.02, 0.92, f'Dur: {dur}', transform=ax2.transAxes, ha='left',
+             va='top', color='white', )
+    ax2.text(0.02, 0.86, f'Themal noise: {noise}', transform=ax2.transAxes, ha='left',
+             va='top', color='white', )
+    ax2.text(0.02, 0.80, f'Cal err: {cal_error}', transform=ax2.transAxes, ha='left',
+             va='top', color='white', )
 
     plt.colorbar(im2, ax=ax2, label=r'T$_B$ [K]')
 
     major2_pix = beam2['major']['value'] / pixscale_x
     minor2_pix = beam2['minor']['value'] / pixscale_y
-    pa2_deg   = beam2['positionangle']['value']
+    pa2_deg = beam2['positionangle']['value']
 
     ell = Ellipse((x0, y0),
                   width=major2_pix, height=minor2_pix,
@@ -3213,8 +3680,7 @@ def plot_two_casa_images(image1_filename, image2_filename,
                   edgecolor='white', facecolor='none', lw=1.5)
     ax2.add_patch(ell)
 
-
-# Left panel: Image1 (original)
+    # Left panel: Image1 (original)
     ax3 = axs[1, 0]
     im3 = ax3.imshow(img_fidelity1.transpose(), origin='lower', cmap=plt.get_cmap(cmap_model),
                      vmax=vmax_val1_model, vmin=vmin_val1_model)
@@ -3233,6 +3699,6 @@ def plot_two_casa_images(image1_filename, image2_filename,
     plt.colorbar(im4, ax=ax4, label=r'I/|I-T|')
 
     plt.tight_layout()
-    stats = {'snr': [snr1, snr2] }
+    stats = {'snr': [snr1, snr2]}
 
     return fig, axs, stats
