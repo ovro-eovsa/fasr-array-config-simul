@@ -8,7 +8,12 @@
 /dataSources.local.xml
 .idea/
 *.log
-FASR/
+FASR-A/
+FASR-B/
+*.pdf
+*.jpg
+*.png
+*.key
 *2.py
 *2.ipynb
 .DS_Store
